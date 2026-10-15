@@ -3,6 +3,13 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing stable tag to publish
+        required: true
+        type: string
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 permissions:
   contents: write
 jobs:
@@ -10,6 +17,9 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: android-actions/setup-android@v3
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14.8'
@@ -23,7 +33,7 @@ jobs:
       - name: Verify tag and test
         shell: pwsh
         run: |
-          python tools/check_release.py '${{ github.ref_name }}'
+          python tools/check_release.py "$env:RELEASE_TAG"
           python -m pip install ./server
           python -m unittest discover -s tests
           node --test chrome-extension/protocol.test.mjs
@@ -51,4 +61,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release create '${{ github.ref_name }}' dist/Syncro-Windows.zip dist/chrome-extension.zip --verify-tag --title 'Синхро ${{ github.ref_name }} · Windows' --generate-notes
+        run: gh release create "$env:RELEASE_TAG" dist/Syncro-Windows.zip dist/chrome-extension.zip --verify-tag --title 'Синхро ${{ env.RELEASE_TAG }} · Windows' --generate-notes
