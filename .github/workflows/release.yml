@@ -20,6 +20,9 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.14.8'
