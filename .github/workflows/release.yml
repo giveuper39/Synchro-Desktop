@@ -1,0 +1,54 @@
+name: Windows release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14.8'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify tag and test
+        shell: pwsh
+        run: |
+          python tools/check_release.py '${{ github.ref_name }}'
+          python -m pip install ./server
+          python -m unittest discover -s tests
+          node --test chrome-extension/protocol.test.mjs
+          python tools/package_extension.py
+      - name: Build clipboard bridge and include official ADB
+        shell: pwsh
+        run: |
+          & "$env:ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager.bat" 'platforms;android-36' 'build-tools;35.0.0' 'platform-tools'
+          ./android/build-clipboard-bridge.ps1 -JavaHome $env:JAVA_HOME -AndroidHome $env:ANDROID_HOME
+          New-Item -ItemType Directory -Path '.tools/android-sdk/platform-tools' -Force | Out-Null
+          Copy-Item "$env:ANDROID_HOME/platform-tools/*" '.tools/android-sdk/platform-tools/'
+      - name: Include latest stable Android receiver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download --repo giveuper39/syncro-android --pattern Syncro-Android.apk --dir dist
+          Copy-Item dist/Syncro-Android.apk dist/potplayer-receiver.apk
+      - name: Package portable Windows
+        shell: pwsh
+        run: |
+          python tools/package_windows.py
+          Copy-Item 'dist/Синхро-Windows-*.zip' dist/Syncro-Windows.zip
+      - name: Publish stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release create '${{ github.ref_name }}' dist/Syncro-Windows.zip dist/chrome-extension.zip --verify-tag --title 'Синхро ${{ github.ref_name }} · Windows' --generate-notes

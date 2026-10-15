@@ -1,0 +1,11 @@
+.data/
+.tools/
+__pycache__/
+*.py[cod]
+.venv/
+**/*.egg-info/
+.gradle/
+local.properties
+**/build/
+dist/
+*.log
