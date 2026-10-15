@@ -9,6 +9,7 @@ on:
         required: true
         type: string
 env:
+  PYTHONUTF8: '1'
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 permissions:
   contents: write

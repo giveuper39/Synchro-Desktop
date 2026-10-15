@@ -94,7 +94,7 @@ def main():
                 output.write(path, Path('Синхро') / path.relative_to(stage))
     (ROOT / '.data/windows-stage.txt').write_text(str(stage), encoding='utf-8')
     print(json.dumps({'package': str(target), 'bytes': target.stat().st_size,
-                      'stage': str(stage)}, ensure_ascii=False))
+                      'stage': str(stage)}))
 
 
 if __name__ == '__main__':
