@@ -1,5 +1,7 @@
 """Authenticated JSON control API and seekable, byte-for-byte HTTP file streaming."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import os
+import socket
 import json
 import mimetypes
 from pathlib import Path
@@ -36,7 +38,12 @@ def byte_range(header, size):
 
 class HandoffHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
-    allow_reuse_address = True
+    allow_reuse_address = os.name != 'nt'
+
+    def server_bind(self):
+        if os.name == 'nt':
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
     def __init__(self, address, manager, receiver_apk=None, pairing_host=None, hub=None):
         self.manager = manager

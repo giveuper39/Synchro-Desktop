@@ -52,6 +52,10 @@ def main():
     parser.add_argument('--data-dir', type=Path, default=Path(__file__).resolve().parents[2] / '.data')
     parser.add_argument('--open', action='store_true', help='Open the local pairing page')
     args = parser.parse_args()
+    from .single_instance import claim_service
+    instance = claim_service(args.port)
+    if instance is None:
+        return
     if importlib.util.find_spec('qrcode') is None or importlib.util.find_spec('zeroconf') is None:
         parser.error('Нужны пакеты qrcode и zeroconf. Запустите start-server.cmd: он подготовит окружение автоматически.')
     args.data_dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +76,7 @@ def main():
     wireless = WirelessSetup(Path(__file__).resolve().parents[2], hub, f'http://{address}:{args.port}', token)
     hub.wireless = wireless
     server = HandoffHTTPServer((args.bind, args.port), manager, apk, address, hub=hub)
+    instance.publish(server.server_port)
     from .updates import Updates
     server.updates = Updates(Path(__file__).resolve().parents[2], server.server_port)
     import json
@@ -102,6 +107,7 @@ def main():
         player.close()
         hub.close()
         wireless.close()
+        instance.close()
 
 
 if __name__ == '__main__':
