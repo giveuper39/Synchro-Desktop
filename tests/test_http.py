@@ -164,6 +164,23 @@ class HTTPTests(unittest.TestCase):
         self.assertIn('/local/setup/start', body.decode())
         self.assertEqual(self.request('GET', '/setup', {'Host': 'foreign.example'})[0], 404)
 
+    def test_update_check_is_local_and_foreign_origin_is_rejected(self):
+        self.server.updates = SimpleNamespace(check=Mock(return_value={'stage': 'checking'}))
+        for headers in ({'Origin': 'https://example.com'}, {'Host': 'foreign.example'}):
+            self.assertEqual(self.request('POST', '/local/updates/check', headers)[0], 403)
+        self.server.updates.check.assert_not_called()
+        self.assertEqual(self.request('POST', '/local/updates/check')[0], 200)
+        self.server.updates.check.assert_called_once()
+
+    def test_windows_update_cannot_interrupt_phone_viewing(self):
+        self.server.updates = SimpleNamespace(install=Mock(return_value={'stage': 'downloading'}))
+        self.manager.describe = lambda _: {'owner': 'android'}
+        self.assertEqual(self.request('POST', '/local/updates/install')[0], 409)
+        self.server.updates.install.assert_not_called()
+        self.manager.describe = lambda _: {'owner': 'pc'}
+        self.assertEqual(self.request('POST', '/local/updates/install')[0], 200)
+        self.server.updates.install.assert_called_once()
+
 
 if __name__ == '__main__':
     unittest.main()
