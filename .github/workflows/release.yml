@@ -54,7 +54,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release download --repo giveuper39/syncro-android --pattern Syncro-Android.apk --dir dist
+          gh release download --repo giveuper39/Synchro-Android --pattern Syncro-Android.apk --dir dist
           Copy-Item dist/Syncro-Android.apk dist/potplayer-receiver.apk
       - name: Package portable Windows
         shell: pwsh

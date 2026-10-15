@@ -3,12 +3,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "potplayer-handoff"
+name = "synchro-desktop"
 version = "0.3.1"
-description = "LAN video streaming and playback handoff between PotPlayer and Android"
+description = "Synchro desktop service for local media, clipboard and browser handoff"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 dependencies = ["qrcode==8.2", "zeroconf==0.151.5"]
 
 [project.scripts]
-potplayer-handoff = "potbridge.__main__:main"
+Synchro = "potbridge.__main__:main"
