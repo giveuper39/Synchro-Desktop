@@ -47,7 +47,7 @@ class FixtureHandler(HandoffHandler):
             with self.server.manager.lock:
                 player = self.server.manager.player
                 fields = {key: value for key, value in changes.items()
-                          if key in {'position_ms', 'audio_index', 'subtitle_delay_ms'}}
+                          if key in {'position_ms', 'audio_index', 'subtitle_delay_ms', 'rate'}}
                 if 'index' in changes:
                     fields['path'] = player.paths[changes['index']]
                 player.state = replace(player.state, **fields)
