@@ -1,10 +1,26 @@
-# YouTube in an existing browser
+# YouTube and tabs in one extension
+
+## Automatic connection · Windows 0.4.4
+
+Install the Synchro extension once from **Browser** in the Windows wizard. The server prepares `%LOCALAPPDATA%/Synchro/browser-extension` at startup and shows installation on first use. In Chrome choose **Developer mode → Load unpacked** and select that prepared directory. No ZIP or bookmark is needed. Personal Windows Chrome requires this first confirmation for local extensions outside the Web Store; Synchro does not edit browser policies or profile preferences. See [Chrome's installation rules](https://developer.chrome.com/docs/extensions/how-to/distribute/install-extensions).
+
+Already open YouTube video tabs appear automatically as Android sources. One extension also sends the explicitly selected ordinary tab by button or swipe. Android 0.4.3 is compatible. The automatic path supports modern Chromium browsers using Chrome extension APIs (Chrome 120+), with up to 12 video documents per profile. Firefox is not claimed to support this Chrome extension.
+
+The service worker reads the existing player through `chrome.scripting`. The injected function receives only bounded playback commands, never service credentials. Tab and document IDs prevent a late command from reaching a replacement page; SPA navigation retains its binding. Commands and acknowledgements share the existing coordinator. Ads are excluded. Without video tabs the worker releases itself; tab events and a 30-second alarm reconnect it. The local wizard can wake it with a narrowly scoped `server-ready` message that exposes no credentials or playback commands.
+
+Automatic bridge HTTP calls require the matching extension ID, permitted origin, loopback client/Host and pairing key. Browser profiles remain separate. Titles, URLs and browsing history are not persisted. Volume remains local; next-video return uses the existing player's feature-detected cue API.
+
+`tools/browser_extension_fixture.py` and `tools/test_browser_extension.mjs` check real Chromium APIs and synthetic HTML video on loopback:18766 with a disposable profile. Automatic discovery, native pause/seek, next-video return, SPA/reload identity, tab sending, closed-page removal and 330 seconds in the background passed. During the background interval the test did not wake the worker through evaluate(). The disposable test manifest grants only a synthetic ordinary host to exercise a popup opened as a test tab; production uses `activeTab`. No real player, user profile, clipboard or production key is used. This does not establish live YouTube availability for a particular phone/account.
+
+## Legacy bookmark connector
+
+Previously installed bookmark connections remain compatible. The sections below describe that optional legacy transport; it is no longer the default Chrome setup.
 
 Synchro uses the player's public playback state; it does not download, extract or
 redistribute YouTube video. Android plays the public YouTube player. Account,
 regional, embedding and age restrictions still apply.
 
-## Connect a page
+### Connect a page with an existing bookmark
 
 1. Open the Synchro setup page on the computer and save its **Synchro · YouTube**
    bookmark in the browser you already use.

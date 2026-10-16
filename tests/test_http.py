@@ -168,6 +168,37 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertNotIn('Access-Control-Allow-Origin', headers)
 
+    def test_automatic_youtube_requires_extension_origin_id_and_pairing_key(self):
+        from synchro.extension import extension_id
+        from synchro.extension_setup import ExtensionSetup
+        from synchro.youtube import YouTubeCoordinator
+        from test_extension import snapshot
+        self.server.extension = ExtensionSetup(Path(__file__).resolve().parents[1], Path(self.temporary.name) / 'extension')
+        self.server.youtube = YouTubeCoordinator(Path('.'), SimpleNamespace(list_sessions=lambda: []))
+        headers = {'X-Synchro-Extension': extension_id(), 'Origin':'chrome-extension://' + extension_id(),
+                   'Authorization':'Bearer ' + self.token, 'Content-Type':'application/json'}
+        def post(changed):
+            connection = http.client.HTTPConnection('127.0.0.1', self.server.server_port, timeout=3)
+            connection.request('POST', '/api/extension/youtube/sync', body=json.dumps(snapshot()), headers=changed)
+            response = connection.getresponse(); status = response.status; response.read(); connection.close()
+            return status
+        for changed in (dict(headers, Origin='https://www.youtube.com'), dict(headers, Host='foreign.example'),
+                        dict(headers, **{'X-Synchro-Extension':'wrong'})):
+            self.assertEqual(post(changed), 403)
+        self.assertEqual(post(dict(headers, Authorization='Bearer wrong')), 401)
+        self.assertEqual(self.server.youtube.bridges, {})
+        self.assertEqual(post(headers), 200)
+        self.assertEqual(len(self.server.youtube.bridges), 1)
+        status, _, body = self.request('GET', '/local/extension/status')
+        self.assertEqual(status, 200); self.assertTrue(json.loads(body)['connected'])
+        self.assertEqual(self.request('GET', '/local/extension/status', {'Host':'foreign.example'})[0], 404)
+
+    def test_extension_setup_action_cannot_be_triggered_from_a_website(self):
+        self.server.extension = SimpleNamespace(open=Mock(return_value={'ok':True}))
+        for headers in ({'Origin':'https://www.youtube.com'}, {'Host':'foreign.example'}):
+            self.assertEqual(self.request('POST', '/local/extension/open', headers)[0], 403)
+        self.server.extension.open.assert_not_called()
+
     def test_background_setup_is_not_startable_from_a_foreign_web_origin(self):
         for headers in ({'Origin': 'https://example.com'}, {'Host': 'foreign.example'}):
             status, _, _ = self.request('POST', '/local/setup/start', headers)

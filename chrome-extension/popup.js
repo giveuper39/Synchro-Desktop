@@ -30,7 +30,17 @@ async function send() {
   finally {sending=false;}
 }
 ui.send.addEventListener('click',send);
-ui.connect.addEventListener('click',()=>pair().catch(error=>status(error.message,true)));
+ui.connect.addEventListener('click',()=>chrome.tabs.create({url:base+'/setup?section=browser'}));
+function renderConnection(value) {
+  const connected = value?.connected && Date.now() - value.updatedAt < 70000;
+  ui.badge.textContent = connected ? 'Подключено' : 'Нет связи';
+  document.getElementById('youtubeStatus').textContent = connected
+    ? (value.youtubeTabs ? `Открытых видео: ${value.youtubeTabs}. Выберите источник на телефоне.` : 'Откройте ролик — он появится в Synchro на телефоне.')
+    : (value?.error || 'Запустите Synchro на компьютере.');
+}
+chrome.storage.session.get('connection').then(value=>renderConnection(value.connection));
+chrome.storage.onChanged.addListener((changes,area)=>{if(area==='session'&&changes.connection)renderConnection(changes.connection.newValue)});
+void chrome.runtime.sendMessage({type:'synchro:refresh'});
 let down;
 ui.card.addEventListener('pointerdown',event=>{down=[event.clientX,event.clientY];ui.card.setPointerCapture(event.pointerId);});
 ui.card.addEventListener('pointerup',event=>{if(down && event.clientX-down[0]>65 && Math.abs(event.clientY-down[1])<60)send();down=null;});

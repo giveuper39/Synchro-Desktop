@@ -91,6 +91,13 @@ def main():
     player.catalog()
     from .updates import Updates
     server.updates = Updates(Path(__file__).resolve().parents[2], server.server_port)
+    from .extension_setup import ExtensionSetup
+    extension = ExtensionSetup(root)
+    server.extension = extension
+    try:
+        extension.prepare()
+    except (OSError, ValueError) as error:
+        logging.warning('Browser extension preparation unavailable: %s', type(error).__name__)
     import json
     (args.data_dir / 'service.json').write_text(json.dumps({'port': server.server_port, 'bind': args.bind,
                                                          'advertiseHost': address}), encoding='utf-8')
@@ -106,8 +113,11 @@ def main():
     print('Synchro · сервис готов', flush=True)
     print(f'Телефон: http://{address}:{server.server_port}', flush=True)
     print(f'QR-код: http://127.0.0.1:{server.server_port}/pair', flush=True)
-    if args.open:
-        webbrowser.open(f'http://127.0.0.1:{server.server_port}/setup')
+    first_browser_setup = os.name == 'nt' and not os.environ.get('CI') and extension.prepared and extension.first_start()
+    if args.open or first_browser_setup:
+        page = '/setup?section=browser&install=1' if first_browser_setup else '/setup'
+        if webbrowser.open(f'http://127.0.0.1:{server.server_port}' + page) and first_browser_setup:
+            extension.mark_shown()
     try:
         server.serve_forever(poll_interval=.3)
     except KeyboardInterrupt:

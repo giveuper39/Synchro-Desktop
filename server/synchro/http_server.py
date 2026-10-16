@@ -171,6 +171,8 @@ class HandoffHandler(BaseHTTPRequestHandler):
                 self._reply(200, self._hub().wireless.status())
             elif path == '/local/updates/status' and self._local():
                 self._reply(200, self.server.updates.status())
+            elif path == '/local/extension/status' and self._local():
+                self._reply(200, self.server.extension.status())
             elif path == '/browser/connect' and self._local():
                 from .browser_page import connection_page
                 page = connection_page()
@@ -246,6 +248,19 @@ class HandoffHandler(BaseHTTPRequestHandler):
         # Close rejected POSTs so an unread request body cannot be interpreted as a new request.
         self.close_connection = True
         path = urlsplit(self.path).path
+        if path == '/local/extension/open':
+            if not self._local():
+                self._reply(403, {'error': 'Open browser setup on this computer'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 1024:
+                    raise ValueError('Invalid browser setup request')
+                data = json.loads(self.rfile.read(length))
+                self._reply(200, self.server.extension.open(data.get('action')))
+            except Exception as error:
+                self._error(error)
+            return
         if path.startswith('/local/browser/') or path in ('/local/players/open', '/local/players/select'):
             if not self._local():
                 self._reply(403, {'error': 'Open this connection on the computer'})
@@ -326,6 +341,27 @@ class HandoffHandler(BaseHTTPRequestHandler):
                 self._reply(403, {'error': 'Pair from the local Synchro extension'})
                 return
             self._reply(200, {'token': self.server.manager.token})
+            return
+        if path == '/api/extension/youtube/sync':
+            if not self._extension():
+                self._reply(403, {'error': 'Use the local Synchro extension'})
+                return
+            if not self._authorized():
+                self._reply(401, {'error': 'Pairing key required'})
+                return
+            try:
+                length = int(self.headers.get('Content-Length', '0'))
+                if not 0 < length <= 65536:
+                    raise ValueError('Invalid browser snapshot size')
+                data = json.loads(self.rfile.read(length))
+                if not isinstance(data, dict) or not isinstance(data.get('version'), str) or not re.fullmatch(r'\d+\.\d+\.\d+', data['version']):
+                    raise ValueError('Invalid extension version')
+                result = self.server.youtube.extension_sync(data)
+                self.server.extension.heartbeat(data['clientId'], data['version'], len(data['pages']))
+                result.update(extensionVersion=self.server.extension.version, reloadAvailable=self.server.extension.prepared)
+                self._reply(200, result)
+            except Exception as error:
+                self._error(error)
             return
         if not self._authorized():
             self._reply(401, {'error': 'Pairing key required'})

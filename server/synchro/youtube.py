@@ -134,6 +134,7 @@ class PageBridge:
     commands: list = field(default_factory=list)
     acknowledgements: dict = field(default_factory=dict)
     system_id: str | None = None
+    extension_page: tuple | None = None
 
 
 @dataclass
@@ -200,12 +201,12 @@ class YouTubeCoordinator:
                 result.append(dict(id=identity, name='YouTube · ' + (binding.get('browser') if binding else state['appId']),
                                    kind='youtube', installed=True, ready=ready,
                                    detail='Открытая вкладка YouTube' if ready else
-                                   'Подключите эту страницу кнопкой «Synchro» в закладках браузера', media=video))
+                                   'Установите расширение Synchro: оно подключит YouTube автоматически', media=video))
             for bridge in connected:
                 identity = 'youtube:page:' + bridge.id
                 active[identity] = dict(kind='page', bridge=bridge, video=dict(bridge.video))
-                result.append(dict(id=identity, name='YouTube · подключённая страница', kind='youtube',
-                                   installed=True, ready=True, detail='Связь с выбранной страницей · ' + bridge.origin,
+                result.append(dict(id=identity, name='YouTube · ' + ('расширение Synchro' if bridge.extension_page else 'подключённая страница'), kind='youtube',
+                                   installed=True, ready=True, detail=('Открытая вкладка · ' if bridge.extension_page else 'Связь с выбранной страницей · ') + bridge.origin,
                                    media=dict(bridge.video)))
             # Keep the active binding while Android owns playback even if a
             # platform briefly omits a paused session from its discovery list.
@@ -278,9 +279,67 @@ class YouTubeCoordinator:
             self.changed.notify_all()
             return dict(ok=True)
 
+    def extension_sync(self, data):
+        """One complete snapshot per browser profile, using the existing page command queue."""
+        client = data.get('clientId')
+        if not isinstance(client, str) or not re.fullmatch(r'[a-f0-9-]{36}', client):
+            raise ValueError('A browser profile identity is required')
+        pages, wait_ms = data.get('pages'), data.get('waitMs', 0)
+        if not isinstance(pages, list) or len(pages) > 12:
+            raise ValueError('Use at most 12 YouTube pages')
+        if type(wait_ms) is not int or not 0 <= wait_ms <= 1000:
+            raise ValueError('Invalid browser polling interval')
+        checked, identities = [], set()
+        # Validate the complete snapshot before removing or updating any page.
+        for page in pages:
+            if not isinstance(page, dict) or page.get('origin') not in YOUTUBE_ORIGINS:
+                raise ValueError('Only YouTube pages can connect automatically')
+            tab, document = page.get('tabId'), page.get('documentId')
+            if type(tab) is not int or not 0 <= tab < 2**31 or not isinstance(document, str) or not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', document):
+                raise ValueError('A browser tab and document identity are required')
+            identity = (client, tab, document)
+            if identity in identities:
+                raise ValueError('Duplicate browser document')
+            identities.add(identity)
+            acks = page.get('acks', [])
+            if not isinstance(acks, list) or len(acks) > 8:
+                raise ValueError('Invalid command acknowledgements')
+            for ack in acks:
+                if not isinstance(ack, dict) or not isinstance(ack.get('id'), str) or not re.fullmatch(r'[a-f0-9]{32}', ack['id']) or (type(ack.get('error')) is not bool and ack.get('error') != 'pc_changed'):
+                    raise ValueError('Invalid command acknowledgement')
+            checked.append((identity, page['origin'], _video(page.get('video')), acks))
+        with self.changed:
+            now = self.clock()
+            for identity, bridge in list(self.bridges.items()):
+                if ((bridge.extension_page and bridge.extension_page[0] == client and bridge.extension_page not in identities)
+                        or now - bridge.last_seen > 60):
+                    del self.bridges[identity]
+            current = {b.extension_page: b for b in self.bridges.values() if b.extension_page}
+            if len(self.bridges) + sum(identity not in current for identity in identities) > 48:
+                raise PlayerUnavailable('Too many connected YouTube pages')
+            connected = []
+            for identity, origin, video, acks in checked:
+                bridge = current.get(identity)
+                if bridge is None:
+                    bridge = PageBridge(uuid.uuid4().hex, secrets.token_urlsafe(24), origin,
+                                        secrets.token_hex(24), video, now, extension_page=identity)
+                    self.bridges[bridge.id] = bridge
+                bridge.video, bridge.last_seen = video, now
+                for ack in acks:
+                    if any(command['id'] == ack['id'] for command in bridge.commands):
+                        bridge.commands = [command for command in bridge.commands if command['id'] != ack['id']]
+                        bridge.acknowledgements[ack['id']] = ack['error']
+                connected.append(bridge)
+            self.changed.notify_all()
+            if connected and wait_ms and not any(b.commands for b in connected):
+                self.changed.wait(wait_ms / 1000)
+            return dict(pages=[dict(tabId=b.extension_page[1], documentId=b.extension_page[2],
+                                    commands=[dict(command) for command in b.commands])
+                               for b in connected if b.id in self.bridges])
+
     def _request(self, bridge, action, **values):
         if bridge.id not in self.bridges or self.clock() - bridge.last_seen > 12:
-            raise PlayerUnavailable('Окно подключения YouTube закрыто. Подключите страницу снова')
+            raise PlayerUnavailable('Нет связи с вкладкой YouTube. Проверьте расширение Synchro')
         command = dict(id=uuid.uuid4().hex, action=action, **values)
         if len(bridge.commands) >= 8:
             raise PlayerUnavailable('Страница YouTube не отвечает')
@@ -291,7 +350,7 @@ class YouTubeCoordinator:
             remaining = deadline - time.monotonic()
             if remaining <= 0 or bridge.id not in self.bridges:
                 bridge.commands = [c for c in bridge.commands if c['id'] != command['id']]
-                raise PlayerUnavailable('Страница YouTube не подтвердила команду. Оставьте окно подключения открытым')
+                raise PlayerUnavailable('Страница YouTube не подтвердила команду. Проверьте подключение браузера')
             self.changed.wait(remaining)
         failed = bridge.acknowledgements.pop(command['id'])
         if failed == 'pc_changed':
@@ -335,7 +394,7 @@ class YouTubeCoordinator:
         if source['kind'] == 'page':
             bridge = source['bridge']
             if bridge.id not in self.bridges or self.clock() - bridge.last_seen > 12:
-                raise PlayerUnavailable('Окно подключения YouTube закрыто')
+                raise PlayerUnavailable('Вкладка YouTube больше не подключена')
             return dict(bridge.video)
         current = self._native_state(source)
         state = dict(source['video'])
@@ -351,7 +410,7 @@ class YouTubeCoordinator:
             self.catalog()
             source = self._source(source_id)
             if not source['video'].get('videoId'):
-                raise PlayerUnavailable('Подключите страницу YouTube закладкой «Synchro»')
+                raise PlayerUnavailable('Подключите браузер через расширение Synchro')
             if source['kind'] == 'page':
                 snapshot = self._request(source['bridge'], 'pause')
             else:

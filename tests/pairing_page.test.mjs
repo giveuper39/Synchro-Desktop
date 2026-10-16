@@ -86,14 +86,15 @@ test('an ordinary download page does not invent or request connection credential
   assert.match(html('connect'), /name="referrer" content="no-referrer"/);
 });
 
-async function setup(installFails = false) {
+async function setup(installFails = false, search = '') {
   const {nodes, document} = dom(), requests = [];
-  const context = {document, setInterval(){}, fetch:async (url, options) => {
+  const context = {document, URLSearchParams, location:{search}, history:{replaceState(){}}, setInterval(){}, fetch:async (url, options) => {
     requests.push(url);
     const failure = installFails && url === '/local/setup/install';
     const value = failure ? {error:'Телефон отключён'} : url === '/local/pairing'
       ? {url:origin + '/connect' + fragment(appUri()),qrSvg:'<svg/>',server:origin,name:'Мой компьютер'}
-      : {bookmarklet:'javascript:void(0)',stage:'scan',message:'Сканируйте QR'};
+      : url === '/local/extension/status' ? {connected:false,prepared:true,folder:'C:/Synthetic/Synchro/browser-extension',youtubeTabs:0}
+      : {stage:'scan',message:'Сканируйте QR'};
     return {ok:!failure,json:async()=>value};
   }};
   vm.createContext(context);
@@ -128,4 +129,12 @@ test('installation is visibly busy and a failed worker offers retry', async () =
   assert.equal(nodes.get('install').disabled, false);
   assert.equal(nodes.get('install').textContent, 'Повторить установку');
   assert.equal(nodes.get('message').textContent, 'Android отклонил установку');
+});
+
+test('first browser setup presents the prepared folder and opens Chrome setup once', async () => {
+  const {nodes,requests} = await setup(false, '?section=browser&install=1');
+  assert.equal(nodes.get('extensionFolder').textContent, 'C:/Synthetic/Synchro/browser-extension');
+  assert.equal(requests.filter(path=>path==='/local/extension/open').length, 1);
+  assert.equal(requests.includes('/local/browser/bookmarklet'), false);
+  assert.equal(requests.includes('/local/setup/start'), false);
 });
