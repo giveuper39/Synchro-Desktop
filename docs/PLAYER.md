@@ -19,9 +19,9 @@
    **«Установить приложение»** и сканируйте код обычной камерой телефона.
    Либо откройте показанный адрес компьютера и скачайте `/receiver.apk`.
    Для этого положите
-   собранный APK в `dist/potplayer-receiver.apk` (готовая локальная сборка
+   собранный APK в `dist/Synchro-Android.apk` (готовая локальная сборка
    поставляется отдельно от исходников).
-5. Откройте **PotPlayerReceiver → «Сканировать QR-код»**. Код из вкладки
+5. Откройте **Synchro → «Сканировать QR-код»**. Код из вкладки
    **«Подключить телефон»** заполнит адрес, ключ и имя ПК автоматически.
    Подключение сохраняется на телефоне. Нажмите
    **«Продолжить с ПК»**: PotPlayer остановится, а ресивер откроет файл с его
@@ -79,7 +79,7 @@ Plugin и LibVLC 3.7.7. Получаются отдельные APK для arm64
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e server
-.\.venv\Scripts\python.exe -m potbridge --open
+.\.venv\Scripts\python.exe -m synchro --open
 ```
 
 Параметры `--player-exe`, `--player-pid`, `--bind`, `--port` и
@@ -91,7 +91,7 @@ python -m venv .venv
 
 | Модуль | Ответственность |
 | --- | --- |
-| `server/potbridge/player.py` | Сериализованный адаптер PotPlayer |
+| `server/synchro/player.py` | Сериализованный адаптер PotPlayer |
 | `win32.py`, `menus.py`, `track_menus.py` | IPC, дорожки, задержка, точная перемотка |
 | `playlist.py`, `library.py` | Очередь, разрешенные файлы и метаданные |
 | `sessions.py` | Владение просмотром, порядок событий, возврат и отключение |

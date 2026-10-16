@@ -95,6 +95,8 @@ class SessionManager:
                 return choices[index]['title'] or choices[index]['language']
             return ''
         return {'sessionId': s.id, 'sequence': s.sequence, 'owner': s.owner,
+                'sourceId': getattr(self.player, 'selected', 'potplayer'),
+                'capabilities': getattr(self.player, 'capabilities', {'audioTracks': True, 'subtitles': True, 'subtitleDelay': True, 'rate': True}),
                 'revoked': s.revoked, 'index': s.index, 'items': items,
                 'positionMs': snapshot.position_ms, 'rate': snapshot.rate,
                 'audioIndex': snapshot.audio_index, 'subtitleIndex': snapshot.subtitle_index,
@@ -129,7 +131,8 @@ class SessionManager:
         with self.lock:
             previous = self.session
             snapshot = self.player.capture()
-            selection = discover_playlist(snapshot.path, self.playlist)
+            selection = (self.player.playlist_selection(snapshot.path, self.playlist)
+                         if hasattr(self.player, 'playlist_selection') else discover_playlist(snapshot.path, self.playlist))
             items = [self.library.add(path) for path in selection.paths]
             index = next(i for i, item in enumerate(items) if item.path == snapshot.path.resolve())
             resume_in_place = bool(

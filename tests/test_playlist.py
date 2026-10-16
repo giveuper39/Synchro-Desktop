@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
-from potbridge.playlist import _active_saved_playlist, discover_playlist
+from synchro.playlist import _active_saved_playlist, discover_playlist
 
 
 class PlaylistTests(unittest.TestCase):
@@ -67,7 +67,7 @@ class PlaylistTests(unittest.TestCase):
         old = self.media("old/film.mkv")
         playlist = self.root / "old.dpl"
         playlist.write_text(f"DAUMPLAYLIST\n1*file={old}\n", encoding="utf-8")
-        with patch("potbridge.playlist._active_saved_playlist", return_value=playlist):
+        with patch("synchro.playlist._active_saved_playlist", return_value=playlist):
             selection = discover_playlist(current)
         self.assertEqual(selection.paths, [current])
         self.assertEqual(selection.source, "directory")

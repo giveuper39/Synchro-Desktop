@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.sharing import DeviceHub, plain_text, web_url
+from synchro.sharing import DeviceHub, plain_text, web_url
 
 
 class FakeClipboard:

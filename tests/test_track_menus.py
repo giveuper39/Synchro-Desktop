@@ -4,7 +4,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.track_menus import extract_tracks
+from synchro.track_menus import extract_tracks
 
 
 def item(command, checked=False, children=None):

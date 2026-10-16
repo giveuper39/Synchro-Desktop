@@ -8,12 +8,12 @@ import unittest
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.updates import release_info, unpack, version, Updates
+from synchro.updates import release_info, unpack, version, Updates
 
 
 class UpdateTests(unittest.TestCase):
     def release(self, **changes):
-        asset = {'name': 'Syncro-Windows.zip', 'browser_download_url': 'https://github.com/owner/repo/releases/download/v0.4.0/Syncro-Windows.zip', 'size': 12, 'digest': 'sha256:' + 'a' * 64}
+        asset = {'name': 'Synchro-Windows.zip', 'browser_download_url': 'https://github.com/owner/repo/releases/download/v0.4.0/Synchro-Windows.zip', 'size': 12, 'digest': 'sha256:' + 'a' * 64}
         asset.update(changes)
         return {'tag_name': 'v0.4.0', 'draft': False, 'prerelease': False, 'assets': [asset]}
 
@@ -36,7 +36,7 @@ class UpdateTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.info(data)
 
     def test_untrusted_archive_cannot_modify_user_data_or_escape(self):
-        for name in ('Синхро/../../outside', 'Синхро/.data/pairing-key.txt', 'Синхро\\bad', 'C:/bad', '/absolute', 'other/file'):
+        for name in ('Synchro/../../outside', 'Synchro/.data/pairing-key.txt', 'Synchro\\bad', 'C:/bad', '/absolute', 'other/file'):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp); archive = root / 'archive.zip'
                 with zipfile.ZipFile(archive, 'w') as z: z.writestr(name, 'bad')
@@ -46,7 +46,7 @@ class UpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); archive = root / 'archive.zip'
             with zipfile.ZipFile(archive, 'w') as z:
-                for name in ('BUILD-MANIFEST.json', 'desktop-launcher.py', 'runtime/pythonw.exe', 'server/potbridge/__init__.py'):
-                    z.writestr('Синхро/' + name, '{}')
-            self.assertEqual(unpack(archive, root / 'unpacked'), root / 'unpacked/Синхро')
+                for name in ('BUILD-MANIFEST.json', 'desktop-launcher.py', 'runtime/pythonw.exe', 'server/synchro/__init__.py'):
+                    z.writestr('Synchro/' + name, '{}')
+            self.assertEqual(unpack(archive, root / 'unpacked'), root / 'unpacked/Synchro')
             with self.assertRaises(ValueError): Updates(root).install(lambda: None)

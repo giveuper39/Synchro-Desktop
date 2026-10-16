@@ -27,15 +27,15 @@ def release_info(repository, platform, fetch=None):
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         raise ValueError('Invalid GitHub repository')
     request = urllib.request.Request(f'https://api.github.com/repos/{repository}/releases/latest',
-                                    headers={'User-Agent': 'Syncro-Updater', 'Accept': 'application/vnd.github+json'})
+                                    headers={'User-Agent': 'Synchro-Updater', 'Accept': 'application/vnd.github+json'})
     with (fetch or urllib.request.urlopen)(request, timeout=20) as response:
         release = json.load(response)
     tag = release['tag_name']
     version(tag)
     if release.get('draft') or release.get('prerelease'):
         raise ValueError('A stable published release is required')
-    name = 'Syncro-Windows.zip' if platform == 'desktop' else 'Syncro-Android.apk'
-    asset = next((item for item in release['assets'] if item['name'] == name), None)
+    names = ('Synchro-Windows.zip', 'Syncro-Windows.zip') if platform == 'desktop' else ('Synchro-Android.apk', 'Syncro-Android.apk')
+    asset = next((item for name in names for item in release['assets'] if item['name'] == name), None)
     if not asset:
         raise ValueError('Release does not contain the expected build')
     prefix = f'https://github.com/{repository}/releases/download/{tag}/'
@@ -58,13 +58,13 @@ def unpack(archive, destination):
             raise ValueError('Unpacked release is too large')
         for item in entries:
             parts = PurePosixPath(item.filename).parts
-            if (not parts or parts[0] != 'Синхро' or any(p.lower() in ('..', '.data') for p in parts)
+            if (not parts or parts[0] != 'Synchro' or any(p.lower() in ('..', '.data') for p in parts)
                     or '\\' in item.filename or ':' in item.filename
                     or (item.external_attr >> 16) & 0o170000 == 0o120000):
                 raise ValueError('Unsafe release archive path')
         source.extractall(destination)
-    result = destination / 'Синхро'
-    for required in ('BUILD-MANIFEST.json', 'desktop-launcher.py', 'runtime/pythonw.exe', 'server/potbridge/__init__.py'):
+    result = destination / 'Synchro'
+    for required in ('BUILD-MANIFEST.json', 'desktop-launcher.py', 'runtime/pythonw.exe', 'server/synchro/__init__.py'):
         if not (result / required).is_file():
             raise ValueError('Incomplete portable release')
     return result
@@ -100,7 +100,7 @@ class Updates:
             except Exception:
                 with self.lock:
                     self.state = {'stage': 'error', 'message': 'Не удалось проверить релиз. Проверьте интернет и повторите.'}
-        threading.Thread(target=work, name='syncro-update-check', daemon=True).start()
+        threading.Thread(target=work, name='synchro-update-check', daemon=True).start()
         return self.status()
 
     def status_unlocked(self):
@@ -118,7 +118,7 @@ class Updates:
             self.state = {'stage': 'downloading', 'message': 'Скачиваем и проверяем новую версию…'}
         def work():
             try:
-                stage = Path(tempfile.mkdtemp(prefix='syncro-update-'))
+                stage = Path(tempfile.mkdtemp(prefix='synchro-update-'))
                 target = stage / 'update.zip'
                 digest = hashlib.sha256()
                 count = 0
@@ -144,10 +144,10 @@ class Updates:
                                   '-File', str(script), '-PlanPath', str(plan)],
                                  creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), close_fds=True)
                 with self.lock:
-                    self.state = {'stage': 'restarting', 'message': 'Перезапускаем Синхро. Страница подключится снова…'}
+                    self.state = {'stage': 'restarting', 'message': 'Перезапускаем Synchro. Страница подключится снова…'}
                 shutdown()
             except Exception:
                 with self.lock:
                     self.state = {'stage': 'error', 'message': 'Обновление не установлено. Текущая версия сохранена; можно повторить.'}
-        threading.Thread(target=work, name='syncro-update-install', daemon=True).start()
+        threading.Thread(target=work, name='synchro-update-install', daemon=True).start()
         return self.status()

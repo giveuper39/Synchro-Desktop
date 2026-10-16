@@ -9,7 +9,7 @@ if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
     raise SystemExit('Use a stable vMAJOR.MINOR.PATCH tag')
 if (root / 'server').is_dir():
     sys.path.insert(0, str(root / 'server'))
-    from potbridge import __version__
+    from synchro import __version__
     actual = __version__
 else:
     actual = re.search(r"versionName '([^']+)'", (root / 'android/app/build.gradle').read_text(encoding='utf-8')).group(1)

@@ -12,10 +12,10 @@ import sys
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.models import PlayerSnapshot
-from potbridge.library import MediaLibrary
-from potbridge.sessions import SessionManager
-from potbridge.http_server import HandoffHTTPServer, HandoffHandler
+from synchro.models import PlayerSnapshot
+from synchro.library import MediaLibrary
+from synchro.sessions import SessionManager
+from synchro.http_server import HandoffHTTPServer, HandoffHandler
 
 
 class SlowPlayer:

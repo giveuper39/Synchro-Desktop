@@ -41,6 +41,7 @@ jobs:
           python -m pip install ./server
           python -m unittest discover -s tests
           node --test chrome-extension/protocol.test.mjs
+          node --test tests/youtube_connector.test.mjs
           python tools/package_extension.py
       - name: Build clipboard bridge and include official ADB
         shell: pwsh
@@ -54,15 +55,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          gh release download --repo giveuper39/Synchro-Android --pattern Syncro-Android.apk --dir dist
-          Copy-Item dist/Syncro-Android.apk dist/potplayer-receiver.apk
+          gh release download --repo giveuper39/Synchro-Android --pattern Synchro-Android.apk --dir dist
       - name: Package portable Windows
         shell: pwsh
         run: |
           python tools/package_windows.py
-          Copy-Item 'dist/Синхро-Windows-*.zip' dist/Syncro-Windows.zip
+          Copy-Item 'dist/Synchro-Windows-*.zip' dist/Synchro-Windows.zip
       - name: Publish stable release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release create "$env:RELEASE_TAG" dist/Syncro-Windows.zip dist/chrome-extension.zip --verify-tag --title 'Синхро ${{ env.RELEASE_TAG }} · Windows' --generate-notes
+        run: gh release create "$env:RELEASE_TAG" dist/Synchro-Windows.zip dist/chrome-extension.zip --verify-tag --title 'Synchro ${{ env.RELEASE_TAG }} · Windows' --generate-notes

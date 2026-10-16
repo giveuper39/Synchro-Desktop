@@ -9,8 +9,8 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.wireless import WirelessSetup, PAIRING, CONNECT
-from potbridge.pairing import pairing_uri
+from synchro.wireless import WirelessSetup, PAIRING, CONNECT
+from synchro.pairing import pairing_uri
 
 
 class WirelessTests(unittest.TestCase):
@@ -33,12 +33,12 @@ class WirelessTests(unittest.TestCase):
 
     def test_qr_pairing_discovers_only_the_service_from_that_qr(self):
         payloads = []
-        with patch.object(self.setup, '_discover'), patch('potbridge.wireless.qr_svg', side_effect=lambda value: payloads.append(value) or '<svg/>'):
+        with patch.object(self.setup, '_discover'), patch('synchro.wireless.qr_svg', side_effect=lambda value: payloads.append(value) or '<svg/>'):
             self.setup.begin()
         parts = dict(part.split(':', 1) for part in payloads[0].split(';') if ':' in part)
         self.assertEqual(parts['WIFI'], 'T:ADB')
         service = parts['S']
-        self.assertTrue(service.startswith('syncro-'))
+        self.assertTrue(service.startswith('synchro-'))
         run = Mock(return_value=SimpleNamespace(returncode=0, stdout='connected'))
         with patch.object(self.setup, '_run', run):
             self.setup.records['wrong.' + PAIRING] = {'kind': PAIRING, 'host': '192.168.1.22', 'port': 39000}

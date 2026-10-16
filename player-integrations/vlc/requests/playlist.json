@@ -1,0 +1,5 @@
+<?vlc
+-- Read the active queue through VLC's installed HTTP helper.
+local http = require "httprequests"
+http.printTableAsJson(http.playlisttable())
+?>

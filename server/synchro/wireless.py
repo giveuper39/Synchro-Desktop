@@ -72,7 +72,7 @@ class WirelessSetup:
             self._discover()
             self.generation += 1
             generation = self.generation
-            service, password = 'syncro-' + uuid.uuid4().hex[:16], secrets.token_urlsafe(18)
+            service, password = 'synchro-' + uuid.uuid4().hex[:16], secrets.token_urlsafe(18)
             payload = f'WIFI:T:ADB;S:{service};P:{password};;'
             self.state = {'stage': 'scan', 'message': 'Сканируйте код в настройках беспроводной отладки',
                           'qrSvg': qr_svg(payload), 'expiresAt': time.time() + 300,
@@ -100,14 +100,14 @@ class WirelessSetup:
                         if connection:
                             device = f"{connection['host']}:{connection['port']}"
                             if self._run('connect', device).returncode == 0:
-                                self._message('paired', 'Телефон подключён. Можно установить Синхро', device=device, generation=generation)
+                                self._message('paired', 'Телефон подключён. Можно установить Synchro', device=device, generation=generation)
                                 return
                         if self.closed.wait(.3):
                             return
                     raise OSError('Connect service was not discovered')
             except Exception:
                 self._message('error', 'Не удалось завершить сопряжение. Проверьте Wi-Fi и обновите QR-код', generation=generation)
-        threading.Thread(target=pair, name='syncro-qr-pair', daemon=True).start()
+        threading.Thread(target=pair, name='synchro-qr-pair', daemon=True).start()
         return self.status()
 
     def _message(self, stage, message, generation=None, **fields):
@@ -129,7 +129,7 @@ class WirelessSetup:
             self._message('installing', 'Устанавливаем и подключаем приложение…', device=device)
         def install():
             try:
-                apk = self.root / 'dist/potplayer-receiver.apk'
+                apk = self.root / 'dist/Synchro-Android.apk'
                 result = self._run('-s', device, 'install', '-r', str(apk), timeout=120)
                 if result.returncode or 'Success' not in result.stdout:
                     raise OSError('Install failed')
@@ -145,10 +145,10 @@ class WirelessSetup:
                     self.settings.parent.mkdir(parents=True, exist_ok=True)
                     self.settings.write_text(json.dumps({'serial': serial}), encoding='utf-8')
                 self.hub.mode({'enabled': True, 'device': device})
-                self._message('done', 'Готово. Синхро подключён, автоматический буфер включён', generation=generation)
+                self._message('done', 'Готово. Synchro подключён, автоматический буфер включён', generation=generation)
             except Exception:
                 self._message('error', 'Не удалось установить приложение. Можно скачать APK и установить его вручную', generation=generation)
-        threading.Thread(target=install, name='syncro-phone-install', daemon=True).start()
+        threading.Thread(target=install, name='synchro-phone-install', daemon=True).start()
         return self.status()
 
     def reconnect(self):

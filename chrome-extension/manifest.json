@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "Синхро",
-  "version": "0.3.0",
+  "name": "Synchro",
+  "version": "0.4.0",
   "description": "Отправить текущую вкладку с компьютера на телефон по локальной сети.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAu0Y1oUhTHp2fvpesPA6E9c5QWVBdh6Wxn8liO4UFayYkYhR8ytKGmYd7deNuQ2iZEU2QUiQKVjsSF8I+4EomuVXxoHX1g5IafiVMZN1bPWlC/MDT1t0Ye8c9G83nJQA9UQfWWinpyobZi+NSg1sVuOBAQ++0GPYmU9oWIOfzTwbQWKN9DzTNxnOeaQNIbKGq+mXo3eltaankqYw2KqG47yyykb+QCqLbaGIGj4ZUIpOHwJOkKRh3oo46oL67Qf8Mn4gflhs7RVZm0Ntb2rEIY8dttxY8VDa06J3oqJI7lsC63RrhC+P5j81PQPC74vamEgoBRjpSZLH+YMrCnVdopQIDAQAB",
   "permissions": [
@@ -17,7 +17,7 @@
       "32": "icon32.png",
       "16": "icon16.png"
     },
-    "default_title": "Синхро — отправить вкладку",
+    "default_title": "Synchro — отправить вкладку",
     "default_popup": "popup.html"
   },
   "icons": {

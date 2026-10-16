@@ -12,8 +12,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.http_server import HandoffHTTPServer, HandoffHandler
-from potbridge.library import MediaLibrary
+from synchro.http_server import HandoffHTTPServer, HandoffHandler
+from synchro.library import MediaLibrary
 
 
 class HTTPTests(unittest.TestCase):
@@ -129,7 +129,7 @@ class HTTPTests(unittest.TestCase):
             self.assertEqual(self.request('GET', path)[0], 401)
 
     def test_extension_pairing_requires_own_id_loopback_host_and_no_foreign_origin(self):
-        from potbridge.extension import extension_id
+        from synchro.extension import extension_id
         own = extension_id()
         headers = {'X-Syncro-Extension': own}
         status, _, body = self.request('POST', '/api/extension/connect', headers)
@@ -143,7 +143,7 @@ class HTTPTests(unittest.TestCase):
                 self.assertNotIn(self.token.encode(), body)
 
     def test_only_own_extension_origin_gets_cors_preflight(self):
-        from potbridge.extension import extension_id
+        from synchro.extension import extension_id
         origin = 'chrome-extension://' + extension_id()
         status, headers, _ = self.request('OPTIONS', '/api/links', {'Origin': origin})
         self.assertEqual(status, 204)

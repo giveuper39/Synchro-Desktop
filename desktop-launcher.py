@@ -27,7 +27,7 @@ def main():
                 webbrowser.open(local_url + '/setup')
                 return
     except urllib.error.HTTPError as error:
-        if error.code == 401 and error.headers.get('Server', '').startswith(('Syncro/', 'PotPlayerHandoff/')):
+        if error.code == 401 and error.headers.get('Server', '').startswith(('Synchro/', 'Syncro/', 'PotPlayerHandoff/')):
             webbrowser.open(local_url + '/setup')
             return
     except (OSError, ValueError):
@@ -36,20 +36,20 @@ def main():
     data.mkdir(exist_ok=True)
     sys.stdout = open(data / 'server.log', 'a', encoding='utf-8', buffering=1)
     sys.stderr = sys.stdout
-    sys.argv = ['Синхро', '--port', str(port), '--bind', settings.get('bind', '0.0.0.0')]
+    sys.argv = ['Synchro', '--port', str(port), '--bind', settings.get('bind', '0.0.0.0')]
     if not os.environ.get('CI'):
         sys.argv.append('--open')
     if settings.get('advertiseHost'):
         sys.argv += ['--advertise-host', settings['advertiseHost']]
     try:
-        from potbridge.__main__ import main as serve
+        from synchro.__main__ import main as serve
         serve()
     except Exception:
         import traceback
         traceback.print_exc()
         ctypes.windll.user32.MessageBoxW(None,
-            'Не удалось запустить Синхро. Подробности сохранены в .data/server.log рядом с приложением.',
-            'Синхро', 0x10)
+            'Не удалось запустить Synchro. Подробности сохранены в .data/server.log рядом с приложением.',
+            'Synchro', 0x10)
 
 
 if __name__ == '__main__':

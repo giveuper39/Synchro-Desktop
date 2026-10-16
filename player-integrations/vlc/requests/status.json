@@ -1,0 +1,48 @@
+<?vlc
+-- Synchro's narrow loopback control surface. Uses VLC's installed modules;
+-- no upstream HTTP implementation is copied or patched.
+local http = require "httprequests"
+local allowed = {
+    in_play = true, in_enqueue = true, pl_play = true,
+    pl_forcepause = true, pl_empty = true, seek = true,
+    rate = true, subdelay = true, audio_track = true, subtitle_track = true
+}
+if _GET.command == "synchro_seek" then
+    local milliseconds = tonumber(_GET.ms)
+    local input = vlc.object.input()
+    if input and milliseconds and milliseconds >= 0 and milliseconds <= 2147483647 then
+        -- Stock HTTP seek parses formatted seconds with only whole-second
+        -- precision. Write the native microsecond property for exact resume.
+        vlc.var.set(input, "time", milliseconds * 1000)
+    end
+elseif _GET.command and allowed[_GET.command] then
+    http.processcommands()
+end
+
+local status = { protocol = 1, state = vlc.playlist.status() }
+local input = vlc.object.input()
+local item = vlc.input.item()
+if input and item then
+    status.uri = item:uri()
+    status.timeMs = vlc.var.get(input, "time") / 1000
+    status.durationMs = item:duration() * 1000
+    status.rate = vlc.var.get(input, "rate")
+    status.subtitleDelayMs = vlc.var.get(input, "spu-delay") / 1000
+    status.audioId = vlc.var.get(input, "audio-es")
+    status.subtitleId = vlc.var.get(input, "spu-es")
+
+    local function choices(name)
+        local values, labels = vlc.var.get_list(input, name)
+        local result = {}
+        for index, id in ipairs(values or {}) do
+            if id >= 0 then
+                table.insert(result, { id = id, label = labels[index] or "" })
+            end
+        end
+        return { _array = result }
+    end
+    status.audioTracks = choices("audio-es")
+    status.subtitleTracks = choices("spu-es")
+end
+http.printTableAsJson(status)
+?>

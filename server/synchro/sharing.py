@@ -1,13 +1,14 @@
-"""Independent text/URL sharing: a single live clipboard value and a small explicit link inbox."""
+"""One live text/image clipboard value and a small explicit link inbox."""
 from collections import OrderedDict
 import json
-import hashlib
 from pathlib import Path
 import subprocess
 import threading
 import time
 from urllib.parse import urlsplit
 import uuid
+
+from .clipboard_images import MAX_IMAGE_BYTES, content_digest, image_content
 
 
 def plain_text(value):
@@ -51,11 +52,16 @@ class DeviceHub:
         self.clipboard, self.adb, self.opener = clipboard, adb, opener
         self.origin = uuid.uuid4().hex
         self.lock = threading.RLock()
+        # Clipboard transactions share one digest, including explicit HTTP writes.
+        # A separate lock keeps slow image transfers from blocking status reads.
+        self.clipboard_lock = threading.RLock()
+        self.synced_digest = None
         self.links = OrderedDict()
         self.receipts = OrderedDict()
         self.enabled, self.serial, self.connected = False, None, False
         self.wireless = None
-        self.message, self.last_source, self.last_at = 'Автосинхронизация выключена', None, None
+        self.message = 'Автосинхронизация выключена'
+        self.last_source, self.last_type, self.last_at = None, None, None
         self.settings = self.root / '.data/sync-settings.json'
         try:
             saved = json.loads(self.settings.read_text(encoding='utf-8'))
@@ -63,13 +69,14 @@ class DeviceHub:
         except (OSError, ValueError):
             pass
         self.stopped = threading.Event()
-        self.worker = threading.Thread(target=self._monitor, name='syncro-clipboard', daemon=True)
+        self.worker = threading.Thread(target=self._monitor, name='synchro-clipboard', daemon=True)
         self.worker.start()
 
     def status(self):
         with self.lock:
             return {'clipboard': {'enabled': self.enabled, 'connected': self.connected,
-                    'message': self.message, 'lastSource': self.last_source, 'lastAt': self.last_at},
+                    'message': self.message, 'lastSource': self.last_source,
+                    'lastType': self.last_type, 'lastAt': self.last_at},
                     'links': list(self.links.values())}
 
     def mode(self, data):
@@ -89,15 +96,81 @@ class DeviceHub:
         return self.status()
 
     def clipboard_write(self, data):
-        value = plain_text(data.get('text'))
-        self.clipboard.write(value, self.origin)
-        with self.lock:
-            self.last_source, self.last_at = 'phone', time.time()
-        return {'ok': True}
+        return self._apply_phone_content({'type': 'text', 'text': plain_text(data.get('text'))})
 
     def clipboard_read(self):
-        text, _, _ = self.clipboard.read()
-        return {'text': plain_text(text or ''), 'origin': self.origin}
+        with self.clipboard_lock:
+            content, _, _ = self._read_pc_content()
+        if content is not None and content['type'] == 'image':
+            # Image bytes use the binary endpoint; ordinary status never contains them.
+            return {'type': 'image', 'mime': 'image/png', 'origin': self.origin}
+        return {'type': 'text', 'text': content['text'] if content else '', 'origin': self.origin}
+
+    def clipboard_image_read(self):
+        with self.clipboard_lock:
+            content, _, _ = self._read_pc_content()
+        if content is None or content['type'] != 'image':
+            raise ValueError('The clipboard does not contain an image')
+        return content['data'], self.origin
+
+    def clipboard_image_write(self, payload):
+        return self._apply_phone_content(image_content(payload))
+
+    @staticmethod
+    def _content(content):
+        """Validate the common adapter shape without decoding an image twice."""
+        if content is None:
+            return None
+        if not isinstance(content, dict):
+            raise ValueError('Unsupported clipboard content')
+        if content.get('type') == 'text':
+            return {'type': 'text', 'text': plain_text(content.get('text'))}
+        if (content.get('type') == 'image' and content.get('mime') == 'image/png'
+                and isinstance(content.get('data'), bytes)
+                and 0 < len(content['data']) <= MAX_IMAGE_BYTES):
+            return {'type': 'image', 'mime': 'image/png', 'data': content['data']}
+        raise ValueError('Unsupported clipboard content')
+
+    def _read_pc_content(self):
+        if hasattr(self.clipboard, 'read_content'):
+            content, sequence, origin = self.clipboard.read_content()
+        else:
+            text, sequence, origin = self.clipboard.read()
+            content = {'type': 'text', 'text': text} if text is not None else None
+        return self._content(content), sequence, origin
+
+    def _write_pc_content(self, content):
+        if hasattr(self.clipboard, 'write_content'):
+            return self.clipboard.write_content(content, self.origin)
+        if content['type'] == 'text':
+            return self.clipboard.write(content['text'], self.origin)
+        raise OSError('This clipboard adapter does not support images')
+
+    def _read_phone_content(self):
+        if hasattr(self.adb, 'read_latest_content'):
+            return self._content(self.adb.read_latest_content())
+        text = self.adb.read_latest()
+        return self._content({'type': 'text', 'text': text}) if text is not None else None
+
+    def _send_phone_content(self, content):
+        if hasattr(self.adb, 'send_content'):
+            return self.adb.send_content(content, self.origin)
+        if hasattr(self.adb, 'write_content'):
+            return self.adb.write_content(content, self.origin)
+        if content['type'] == 'text':
+            return self.adb.write(content['text'])
+        raise OSError('This Android adapter does not support images')
+
+    def _record_clipboard(self, source, kind):
+        with self.lock:
+            self.last_source, self.last_type, self.last_at = source, kind, time.time()
+
+    def _apply_phone_content(self, content):
+        with self.clipboard_lock:
+            self._write_pc_content(content)
+            self.synced_digest = content_digest(content)
+            self._record_clipboard('phone', content['type'])
+        return {'ok': True}
 
     def send_link(self, data):
         url = web_url(data.get('url'))
@@ -134,7 +207,6 @@ class DeviceHub:
 
     def _monitor(self):
         sequence = self.clipboard.sequence()
-        synced_digest = None
         next_connect = 0
         while not self.stopped.wait(.15):
             try:
@@ -142,8 +214,9 @@ class DeviceHub:
                     if self.adb.alive():
                         self.adb.close()
                     self.connected = False
-                    sequence = self.clipboard.sequence()
-                    synced_digest = None
+                    with self.clipboard_lock:
+                        sequence = self.clipboard.sequence()
+                        self.synced_digest = None
                     continue
                 if not self.adb.alive():
                     self.connected = False
@@ -165,31 +238,31 @@ class DeviceHub:
                         self.adb.close()
                         continue
                     # Starting/reconnecting never replays either device's old clipboard.
-                    sequence = self.clipboard.sequence()
-                    synced_digest = None
+                    with self.clipboard_lock:
+                        sequence = self.clipboard.sequence()
+                        self.synced_digest = None
                     self.connected = True
                     self.message = 'Системный буфер подключён · ' + device['name']
-                text = self.adb.read_latest()
-                if text is not None:
-                    text = plain_text(text)
-                    digest = hashlib.sha256(text.encode('utf-8')).digest()
-                    if digest != synced_digest:
-                        sequence = self.clipboard.write(text, self.origin)
-                        synced_digest = digest
-                        self.last_source, self.last_at = 'phone', time.time()
-                if self.clipboard.sequence() != sequence:
-                    text, observed_sequence, origin = self.clipboard.read()
-                    # Clipboard providers can briefly advertise a change before
-                    # Unicode data is readable. Retry it instead of losing that copy.
-                    if text is not None:
-                        sequence = observed_sequence
-                    if text is not None and origin != self.origin:
-                        text = plain_text(text)
-                        digest = hashlib.sha256(text.encode('utf-8')).digest()
-                        if digest != synced_digest:
-                            self.adb.write(text)
-                            synced_digest = digest
-                            self.last_source, self.last_at = 'pc', time.time()
+                with self.clipboard_lock:
+                    content = self._read_phone_content()
+                    if content is not None:
+                        digest = content_digest(content)
+                        if digest != self.synced_digest:
+                            sequence = self._write_pc_content(content)
+                            self.synced_digest = digest
+                            self._record_clipboard('phone', content['type'])
+                    if self.clipboard.sequence() != sequence:
+                        content, observed_sequence, origin = self._read_pc_content()
+                        # Providers can advertise a change before its data is
+                        # readable. Retry rather than losing that text or image.
+                        if content is not None:
+                            sequence = observed_sequence
+                        if content is not None and origin != self.origin:
+                            digest = content_digest(content)
+                            if digest != self.synced_digest:
+                                self._send_phone_content(content)
+                                self.synced_digest = digest
+                                self._record_clipboard('pc', content['type'])
             except Exception:
                 self.message = 'Соединение с системным буфером прервано; повторяем подключение'
                 self.connected = False

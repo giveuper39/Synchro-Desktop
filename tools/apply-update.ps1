@@ -9,7 +9,7 @@ if ($appRoot -eq [IO.Path]::GetPathRoot($appRoot) -or $sourceRoot.StartsWith($ap
 $process = Get-Process -Id $plan.pid -ErrorAction SilentlyContinue
 if ($process) { $process.WaitForExit(30000) | Out-Null }
 if (Get-Process -Id $plan.pid -ErrorAction SilentlyContinue) { throw 'Service has not exited; no files changed' }
-$backup = Join-Path (Split-Path -Parent $appRoot) ('Syncro-backup-' + [guid]::NewGuid().ToString('N'))
+$backup = Join-Path (Split-Path -Parent $appRoot) ('Synchro-backup-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $backup | Out-Null
 $oldNames = @()
 $newNames = @()
@@ -35,7 +35,7 @@ try {
     # Keep one recoverable backup. It contains program files, never clipboard or pairing state.
 } catch {
     $failure = $_.Exception.Message
-    $failed = Join-Path (Split-Path -Parent $backup) ('Syncro-failed-' + [guid]::NewGuid().ToString('N'))
+    $failed = Join-Path (Split-Path -Parent $backup) ('Synchro-failed-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $failed | Out-Null
     foreach ($name in $newNames) {
         $itemPath = Join-Path $appRoot $name

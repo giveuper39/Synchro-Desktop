@@ -7,10 +7,10 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from potbridge.library import MediaLibrary
-from potbridge.models import PlayerSnapshot, PlayerUnavailable, SessionConflict
-from potbridge.playlist import PlaylistSelection
-from potbridge.sessions import SessionManager
+from synchro.library import MediaLibrary
+from synchro.models import PlayerSnapshot, PlayerUnavailable, SessionConflict
+from synchro.playlist import PlaylistSelection
+from synchro.sessions import SessionManager
 
 
 class FakePlayer:
@@ -50,7 +50,7 @@ class SessionTests(unittest.TestCase):
         self.manager = SessionManager(self.player, MediaLibrary(ffprobe=False), 'test-pairing-key',
                                       self.root / 'private', clock=lambda: self.clock[0])
         self.selection = PlaylistSelection([self.first, self.second], 'saved-playlist')
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection):
             self.state = self.manager.takeover('http://computer:8765')
 
     def event(self, **changes):
@@ -152,7 +152,7 @@ class SessionTests(unittest.TestCase):
 
     def test_reconnect_invalidates_previous_session_events(self):
         old = self.event()
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection):
             self.manager.takeover('http://computer:8765')
         with self.assertRaises(SessionConflict):
             self.manager.progress(old)
@@ -167,7 +167,7 @@ class SessionTests(unittest.TestCase):
 
     def test_resume_unchanged_pc_allows_buffer_reuse_and_rotates_session_id(self):
         self.manager.progress(self.event(paused=True, audioIndex=1, subtitleDelayMs=-300))
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection), \
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection), \
                 patch.object(self.manager.library, 'preload') as preload:
             resumed = self.manager.resume({'sessionId': self.state['sessionId']}, 'http://computer:8765')
         self.assertTrue(resumed['resumeInPlace'])
@@ -182,7 +182,7 @@ class SessionTests(unittest.TestCase):
     def _resume_after_pc_edit(self, **changes):
         self.manager.progress(self.event(paused=True))
         self.player.snapshot = replace(self.player.snapshot, **changes)
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection):
             return self.manager.resume({'sessionId': self.state['sessionId']}, 'http://computer:8765')
 
     def test_resume_after_pc_seek_uses_the_new_pc_position(self):
@@ -201,24 +201,24 @@ class SessionTests(unittest.TestCase):
                      {'subtitle_delay_ms': -900}, {'rate': 1.5}):
             with self.subTest(edit=edit):
                 self.player.snapshot = original
-                with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+                with patch('synchro.sessions.discover_playlist', return_value=self.selection):
                     self.state = self.manager.takeover('http://computer:8765')
                 self.assertFalse(self._resume_after_pc_edit(**edit)['resumeInPlace'])
 
     def test_resume_detects_saved_playlist_reorder(self):
         self.manager.progress(self.event(paused=True))
         reordered = PlaylistSelection([self.second, self.first], 'saved-playlist')
-        with patch('potbridge.sessions.discover_playlist', return_value=reordered):
+        with patch('synchro.sessions.discover_playlist', return_value=reordered):
             resumed = self.manager.resume({'sessionId': self.state['sessionId']}, 'http://computer:8765')
         self.assertFalse(resumed['resumeInPlace'])
         self.assertEqual(resumed['index'], 1)
 
     def test_unknown_or_unconfirmed_pause_cannot_reuse_the_buffer(self):
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection):
             resumed = self.manager.resume({'sessionId': self.state['sessionId']}, 'http://computer:8765')
         self.assertFalse(resumed['resumeInPlace'])
         self.manager.progress(dict(self.event(paused=True), sessionId=resumed['sessionId']))
-        with patch('potbridge.sessions.discover_playlist', return_value=self.selection):
+        with patch('synchro.sessions.discover_playlist', return_value=self.selection):
             unknown = self.manager.resume({'sessionId': 'obsolete'}, 'http://computer:8765')
         self.assertFalse(unknown['resumeInPlace'])
 

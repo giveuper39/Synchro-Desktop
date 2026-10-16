@@ -137,7 +137,7 @@ def current_filename(window):
                     result.append(payload.decode('cp' + str(kernel32.GetACP())))
             return 1
         return user32.DefWindowProcW(receiver, message, wp, lp)
-    name = f'PotbridgeFilename_{os.getpid()}_{time.monotonic_ns()}'
+    name = f'SynchroFilename_{os.getpid()}_{time.monotonic_ns()}'
     instance = kernel32.GetModuleHandleW(None)
     wc = WindowClass()
     wc.procedure, wc.instance, wc.class_name = callback, instance, name

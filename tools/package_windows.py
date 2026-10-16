@@ -11,14 +11,14 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'server'))
-from potbridge import __version__
+from synchro import __version__
 PYTHON_VERSION = '3.14.8'
 PYTHON_SHA256 = 'a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310'
 
 
 def main():
     parent = ROOT / '.data' / ('windows-package-' + uuid.uuid4().hex)
-    stage = parent / 'Синхро'
+    stage = parent / 'Synchro'
     runtime = stage / 'runtime'
     runtime.mkdir(parents=True)
     archive = ROOT / '.tools/downloads' / f'python-{PYTHON_VERSION}-embed-amd64.zip'
@@ -37,10 +37,10 @@ def main():
     site = runtime / 'Lib/site-packages'
     site.mkdir(parents=True)
     versions = {}
-    for package in ('qrcode', 'zeroconf', 'ifaddr'):
+    for package, module in {'qrcode':'qrcode','zeroconf':'zeroconf','ifaddr':'ifaddr','Pillow':'PIL'}.items():
         distribution = importlib.metadata.distribution(package)
         versions[package] = distribution.version
-        shutil.copytree(Path(distribution.locate_file(package)), site / package,
+        shutil.copytree(Path(distribution.locate_file(module)), site / module,
                         ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
         metadata = next(entry.parts[0] for entry in distribution.files if entry.parts[0].endswith('.dist-info'))
         shutil.copytree(Path(distribution.locate_file(metadata)), site / metadata)
@@ -52,24 +52,26 @@ def main():
                     ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '*.egg-info'))
     shutil.copytree(ROOT / 'chrome-extension', stage / 'chrome-extension',
                     ignore=shutil.ignore_patterns('*.test.mjs', 'package.json'))
+    shutil.copytree(ROOT / 'player-integrations', stage / 'player-integrations', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
+    shutil.copytree(ROOT / 'assets', stage / 'assets')
     (stage / 'dist').mkdir()
-    for name in ('potplayer-receiver.apk', 'syncro-clipboard.jar', 'chrome-extension.zip'):
+    for name in ('Synchro-Android.apk', 'Synchro-Clipboard.jar', 'chrome-extension.zip'):
         shutil.copyfile(ROOT / 'dist' / name, stage / 'dist' / name)
     for name in ('desktop-launcher.py', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'release-config.json'):
         shutil.copyfile(ROOT / name, stage / name)
     (stage / 'tools').mkdir()
     shutil.copyfile(ROOT / 'tools/apply-update.ps1', stage / 'tools/apply-update.ps1')
-    (stage / 'Запустить Синхро.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\nstart "" "runtime\\pythonw.exe" "desktop-launcher.py"\r\n', encoding='ascii')
-    (stage / 'ПРОЧИТАЙТЕ.txt').write_text(
-        'СИНХРО\n\nРаспакуйте всю папку и запустите «Запустить Синхро.cmd».\n'
+    (stage / 'Synchro.cmd').write_text('@echo off\r\ncd /d "%~dp0"\r\nstart "" "runtime\\pythonw.exe" "desktop-launcher.py"\r\n', encoding='ascii')
+    (stage / 'README.txt').write_text(
+        'Synchro\n\nРаспакуйте всю папку и запустите «Synchro.cmd».\n'
         'Откроется мастер: системный QR → установка приложения → готово.\n'
         'Для обычного видео можно выбрать QR приложения без беспроводной отладки.\n\n'
-        'Буфер: только последнее копирование; история текстов Синхро не сохраняется.\n'
+        'Буфер: текст и фото, только последнее копирование, без истории.\n'
         'Просмотр: видео продолжится в системном мини-плеере при сворачивании.\n'
-        'Вкладки: Opera → Поделиться → Синхро; Chrome → расширение из chrome-extension.\n'
+        'Вкладки: Opera → Поделиться → Synchro; Chrome → расширение из chrome-extension.\n'
         'Расширение: chrome://extensions → Режим разработчика → Загрузить распакованное.\n\n'
-        'Python и ADB уже включены. PotPlayer установите отдельно для функции видео.\n'
-        'ffprobe необязателен; он улучшает метаданные дорожек и сопоставление озвучек между сериями.\n'
+        'Python и ADB уже включены. Плееры устанавливаются отдельно.\n'
+        'Источники: PotPlayer, Медиаплеер Windows, VLC, mpv и подключённый YouTube.\n'
         'Библиотеки Python расположены отдельно в runtime/Lib/site-packages и могут заменяться.\n'
         'Лицензии и ссылки на исходники: THIRD_PARTY_NOTICES.md, runtime/LICENSE.txt и runtime/adb/NOTICE.txt.\n', encoding='utf-8')
     sources = stage / 'third-party-sources'
@@ -83,15 +85,15 @@ def main():
         raise ValueError('zeroconf source checksum mismatch')
     (sources / source['filename']).write_bytes(payload)
     (stage / 'BUILD-MANIFEST.json').write_text(json.dumps({
-        'app': 'Синхро', 'version': __version__, 'python': PYTHON_VERSION,
+        'app': 'Synchro', 'version': __version__, 'python': PYTHON_VERSION,
         'pythonSource': url, 'pythonSha256': PYTHON_SHA256, 'packages': versions,
         'adbSource': 'https://android.googlesource.com/platform/packages/modules/adb/',
     }, ensure_ascii=False, indent=2), encoding='utf-8')
-    target = ROOT / f'dist/Синхро-Windows-{__version__}.zip'
+    target = ROOT / f'dist/Synchro-Windows-{__version__}.zip'
     with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as output:
         for path in sorted(stage.rglob('*')):
             if path.is_file() and '.data' not in path.relative_to(stage).parts:
-                output.write(path, Path('Синхро') / path.relative_to(stage))
+                output.write(path, Path('Synchro') / path.relative_to(stage))
     (ROOT / '.data/windows-stage.txt').write_text(str(stage), encoding='utf-8')
     print(json.dumps({'package': str(target), 'bytes': target.stat().st_size,
                       'stage': str(stage)}))

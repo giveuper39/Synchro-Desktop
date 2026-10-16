@@ -1,3 +1,2 @@
-"""PotPlayer Handoff: independent playback with a shared viewing position."""
-
-__version__ = '0.3.1'
+"""Compatibility marker for the pre-0.4 Windows updater."""
+from synchro import __version__

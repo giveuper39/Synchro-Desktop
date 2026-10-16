@@ -1,4 +1,4 @@
-"""One current Unicode clipboard value; received text is excluded from Windows history/cloud."""
+"""One current text or image value, excluded from Windows clipboard history/cloud."""
 import ctypes as ct
 from ctypes import wintypes as wt
 import threading
@@ -31,6 +31,7 @@ class WindowsClipboard:
             function = getattr(library, name)
             function.restype, function.argtypes = result, args
         self.origin_format = self.user.RegisterClipboardFormatW('SyncroClipboardOrigin')
+        self.png_format = self.user.RegisterClipboardFormatW('PNG')
         self.private_formats = [self.user.RegisterClipboardFormatW(name) for name in (
             'ExcludeClipboardContentFromMonitorProcessing', 'CanIncludeInClipboardHistory',
             'CanUploadToCloudClipboard')]
@@ -73,6 +74,33 @@ class WindowsClipboard:
             finally:
                 self.user.CloseClipboard()
 
+    def read_content(self):
+        """Read a real image format before Unicode alternatives such as image URLs."""
+        from .clipboard_images import MAX_DIB_BYTES, MAX_IMAGE_BYTES, image_content
+        with self.lock:
+            self._open()
+            try:
+                sequence = self.sequence()
+                marker = self._bytes(self.origin_format, 256)
+                origin = marker.decode('ascii').rstrip('\0') if marker else None
+                image, dib = self._bytes(self.png_format, MAX_IMAGE_BYTES), False
+                if image is None:
+                    image, dib = self._bytes(17, MAX_DIB_BYTES), True  # CF_DIBV5.
+                if image is None:
+                    image = self._bytes(8, MAX_DIB_BYTES)  # CF_DIB, including Windows bitmap conversion.
+                if image is None:
+                    raw = self._bytes(13)
+                    text = raw.decode('utf-16-le').split('\0', 1)[0] if raw else None
+                    content = {'type': 'text', 'text': text} if text is not None else None
+                else:
+                    content = None
+            finally:
+                self.user.CloseClipboard()
+        # Large-image decoding must not hold the global Windows clipboard lock.
+        if image is not None:
+            content = image_content(image, dib=dib)
+        return content, sequence, origin
+
     def _allocate(self, data):
         handle = self.kernel.GlobalAlloc(0x42, len(data))  # GMEM_MOVEABLE | ZEROINIT
         if not handle:
@@ -92,10 +120,24 @@ class WindowsClipboard:
                    (13, (text + '\0').encode('utf-16-le'))]
         return self._write_values(values)
 
+    def write_content(self, content, origin):
+        if content.get('type') == 'text':
+            return self.write(content['text'], origin)
+        if content.get('type') != 'image' or content.get('mime') != 'image/png':
+            raise ValueError('Unsupported clipboard content')
+        from .clipboard_images import windows_image_formats
+        png, dib_v5, dib = windows_image_formats(content['data'])
+        # All representations are allocated before replacing the current value.
+        # History/cloud flags apply equally to image and text clipboard writes.
+        values = [(format_id, b'\0' * 4) for format_id in self.private_formats]
+        values += [(self.origin_format, origin.encode('ascii') + b'\0'),
+                   (self.png_format, png), (17, dib_v5), (8, dib)]
+        return self._write_values(values)
+
     def _write_values(self, values):
         blocks = []
         with self.lock:
-            window = self.user.CreateWindowExW(0, 'STATIC', 'Syncro clipboard', 0,
+            window = self.user.CreateWindowExW(0, 'STATIC', 'Synchro clipboard', 0,
                                                0, 0, 0, 0, wt.HWND(-3), None, None, None)
             if not window:
                 raise OSError('Clipboard owner window is unavailable')

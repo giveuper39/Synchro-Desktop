@@ -5,10 +5,10 @@ const ui = Object.fromEntries(['title','domain','status','send','connect','card'
 let selected, token, sending = false, requestId = crypto.randomUUID();
 function status(message, error = false) {ui.status.textContent=message;ui.status.dataset.error=String(error);}
 async function request(path, body, authenticated = true) {
-  const headers = {'Content-Type':'application/json','X-Syncro-Extension':chrome.runtime.id};
+  const headers = {'Content-Type':'application/json','X-Synchro-Extension':chrome.runtime.id};
   if (authenticated) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(base+path,{method:'POST',headers,body:JSON.stringify(body),signal:AbortSignal.timeout(6000)});
-  if (!response.ok) throw new Error(response.status === 401 ? 'Подключитесь к ПК заново' : 'Запустите сервис «Синхро» на ПК');
+  if (!response.ok) throw new Error(response.status === 401 ? 'Подключитесь к ПК заново' : 'Запустите сервис «Synchro» на ПК');
   return response.json();
 }
 async function pair() {
@@ -24,7 +24,7 @@ async function send() {
   try {
     if (!token) await pair();
     await request('/api/links',linkPayload(selected,requestId));
-    status('Отправлено. Откройте «Вкладки» в Синхро на телефоне.');
+    status('Отправлено. Откройте «Вкладки» в Synchro на телефоне.');
     ui.send.textContent='Отправлено ✓';
   } catch(error) {status(error.message,true);ui.send.disabled=false;}
   finally {sending=false;}

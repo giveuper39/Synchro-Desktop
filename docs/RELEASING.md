@@ -1,16 +1,16 @@
 # Выпуск версий
 
-Привязка OTA находится в `release-config.json` и в одноимённом Android asset. Проверяется последний опубликованный **стабильный Release**, не произвольный Git-тег и не prerelease. Имена бинарных assets постоянны: `Syncro-Windows.zip`, `Syncro-Android.apk`. Тег — `vMAJOR.MINOR.PATCH`. GitHub вычисляет SHA-256 asset; обе платформы требуют этот digest.
+Привязка OTA находится в `release-config.json` и в одноимённом Android asset. Проверяется последний опубликованный **стабильный Release**, не произвольный Git-тег и не prerelease. Имена бинарных assets постоянны: `Synchro-Windows.zip`, `Synchro-Android.apk`. Тег — `vMAJOR.MINOR.PATCH`. GitHub вычисляет SHA-256 asset; обе платформы требуют этот digest.
 
 ## Android
 
-Увеличьте `versionName` и `versionCode` в `android/app/build.gradle`. Коммит → тег → push. Workflow выполняет unit-тесты, lint и подписанную сборку. В Secrets настроены `SYNCRO_KEYSTORE_BASE64`, `SYNCRO_STORE_PASSWORD`, `SYNCRO_KEY_PASSWORD`; alias `syncro`. Храните независимую резервную копию ключа: с другим ключом Android не установит обновление поверх приложения. Не используйте стандартный debug-ключ для публичных OTA.
+Увеличьте `versionName` и `versionCode` в `android/app/build.gradle`. Коммит → тег → push. Workflow выполняет unit-тесты, lint и подписанную сборку. В Secrets настроены `SYNCHRO_KEYSTORE_BASE64`, `SYNCHRO_STORE_PASSWORD`, `SYNCHRO_KEY_PASSWORD`, `SYNCHRO_KEY_ALIAS`; фактический alias существующего ключа сохраняется. Храните независимую резервную копию ключа: с другим ключом Android не установит обновление поверх приложения. Не используйте стандартный debug-ключ для публичных OTA.
 
 Первый переход с локального прототипа, подписанного debug-ключом, требует переустановки; мастер заново сохраняет подключение. Все опубликованные релизы используют один постоянный release-ключ.
 
 ## Windows
 
-Увеличьте `server/potbridge/__init__.py` и `server/pyproject.toml`. При изменении расширения — также `chrome-extension/manifest.json`. Коммит → тег → push. Workflow запускает тесты, компилирует собственный clipboard JAR, включает официальный ADB и последний стабильный Android APK, собирает переносимый ZIP и публикует Release. Включённый Python проверяется по зафиксированному SHA-256. Не публикуйте `.data`, `.venv`, `.tools`, личные видео и секреты.
+Увеличьте `server/synchro/__init__.py` и `server/pyproject.toml`. При изменении расширения — также `chrome-extension/manifest.json`. Коммит → тег → push. Workflow запускает тесты, компилирует собственный clipboard JAR, включает официальный ADB и последний стабильный Android APK, собирает переносимый ZIP и публикует Release. Включённый Python проверяется по зафиксированному SHA-256. Не публикуйте `.data`, `.venv`, `.tools`, личные видео и секреты.
 
 Кнопка установки скачивает ZIP по HTTPS, сверяет размер/digest, запрещает выход путей, симлинки и `.data` в архиве, проверяет версию сборки. Внешний PowerShell-процесс ждёт завершения сервиса, переносит программные файлы в резервную папку, запускает новую версию и проверяет её ответ. `.data` с ключом/настройками остаётся на месте. Если запуск не удался, возвращаются старые файлы. Во время просмотра с телефона обновление ПК блокируется до паузы.
 

@@ -11,8 +11,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'server'))
-from potbridge.library import MediaLibrary
-from potbridge.player import WindowsPlayer
+from synchro.library import MediaLibrary
+from synchro.player import WindowsPlayer
 
 
 def main():

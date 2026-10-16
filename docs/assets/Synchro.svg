@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360">
+<rect width="1280" height="360" rx="32" fill="#101216"/>
+<circle cx="1130" cy="80" r="220" fill="#191d24"/>
+<circle cx="1130" cy="80" r="160" fill="none" stroke="#f4c75b" stroke-opacity=".12"/>
+<g transform="translate(70 95)" fill="none" stroke="#f4c75b" stroke-width="16" stroke-linecap="round"><rect x="0" y="0" width="72" height="45" rx="22"/><rect x="0" y="23" width="72" height="45" rx="22"/></g>
+<text x="180" y="163" fill="#f9f6ef" font-family="Segoe UI,Arial,sans-serif" font-size="76" font-weight="700" letter-spacing="-3">Synchro</text>
+<text x="74" y="252" fill="#9ca4b3" font-family="Segoe UI,Arial,sans-serif" font-size="27">Продолжайте там, где вам удобно.</text>
+<text x="76" y="300" fill="#f4c75b" font-family="Segoe UI,Arial,sans-serif" font-size="15" letter-spacing="3">WINDOWS + ANDROID · LOCAL CONNECTION</text>
+</svg>

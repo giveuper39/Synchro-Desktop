@@ -40,3 +40,8 @@ The 3.7.7 AAR's ARM64 and x86-64 shared libraries have 16 KB `PT_LOAD` alignment
 - ifaddr 0.2.0, MIT: https://github.com/p-stannis/ifaddr . Its license is included in installed distribution metadata.
 - Android Platform Tools / ADB, Apache 2.0 and component licenses: https://android.googlesource.com/platform/packages/modules/adb/ . The full SDK NOTICE.txt is included in runtime/adb/.
 - PotPlayer and FFmpeg are not bundled.
+
+## Typography and image clipboard
+
+- Manrope, SIL Open Font License 1.1. Font source: https://github.com/google/fonts/tree/main/ofl/manrope . The OFL is bundled alongside the font in assets/Manrope-OFL.txt and in the Android assets.
+- Pillow 12.3.0, HPND / component notices: https://github.com/python-pillow/Pillow/tree/12.3.0 . The Windows runtime includes its distribution metadata and licenses; it processes clipboard images and does not transcode video.

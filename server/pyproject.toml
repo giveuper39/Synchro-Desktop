@@ -4,11 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synchro-desktop"
-version = "0.3.1"
+version = "0.4.0"
 description = "Synchro desktop service for local media, clipboard and browser handoff"
 requires-python = ">=3.11"
 license = {text = "MIT"}
-dependencies = ["qrcode==8.2", "zeroconf==0.151.5"]
+dependencies = ["qrcode==8.2", "zeroconf==0.151.5", "Pillow==12.3.0"]
 
 [project.scripts]
-Synchro = "potbridge.__main__:main"
+Synchro = "synchro.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["synchro*", "potbridge"]
+
+[tool.setuptools.package-data]
+synchro = ["ui/*.html"]
