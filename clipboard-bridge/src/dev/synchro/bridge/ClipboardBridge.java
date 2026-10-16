@@ -134,9 +134,7 @@ public final class ClipboardBridge {
       }
       long timestamp = clip.getDescription().getTimestamp();
       Uri uri = clip.getItemAt(0).getUri();
-      if (uri != null
-          && "content".equals(uri.getScheme())
-          && clip.getDescription().hasMimeType("image/*")) {
+      if (uri != null && "content".equals(uri.getScheme()) && possibleImage(clip)) {
         int imageHash = uri.toString().hashCode();
         if (timestamp == lastTimestamp && imageHash == lastContentHash) return;
         lastTimestamp = timestamp;
@@ -167,6 +165,14 @@ public final class ClipboardBridge {
     }
   }
 
+  private static boolean possibleImage(ClipData clip) {
+    android.content.ClipDescription description = clip.getDescription();
+    return description.hasMimeType("image/*")
+        || description.hasMimeType("application/octet-stream")
+        || description.getMimeTypeCount() == 0
+        || (description.getMimeTypeCount() == 1 && description.hasMimeType("text/uri-list"));
+  }
+
   private static void clearImageSlot() {
     // Fixed files owned by this feature only. They are no longer the current clip.
     new File(IMAGE_DIRECTORY, "from-pc.png").delete();
@@ -180,8 +186,9 @@ public final class ClipboardBridge {
     main.postDelayed(cancel, 10000);
     long deadline = SystemClock.elapsedRealtime() + 10000;
     try (ExternalProvider provider = new ExternalProvider(uri)) {
-      String mime = provider.client.getType(uri);
-      if (mime == null || !mime.startsWith("image/")) return;
+      // Clipboard providers may label a real photo as application/octet-stream.
+      // Validate the bounded encoded image, rather than discarding its MIME hint.
+      String mime;
       byte[] data;
       try (AssetFileDescriptor descriptor = provider.client.openAssetFile(uri, "r", cancellation)) {
         if (descriptor == null || descriptor.getDeclaredLength() > MAX_IMAGE_BYTES) return;

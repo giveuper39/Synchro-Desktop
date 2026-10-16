@@ -128,13 +128,24 @@ class SessionManager:
                 and abs(first.rate - second.rate) < .001)
 
     def takeover(self, base_url, resume_session_id=None):
+        started = time.perf_counter()
+        timings = {}
+        last_mark = started
+        def mark(name):
+            nonlocal last_mark
+            now = time.perf_counter()
+            timings[name] = round((now - last_mark) * 1000)
+            last_mark = now
         with self.lock:
+            mark('lockWaitMs')
             previous = self.session
             snapshot = self.player.capture()
+            mark('captureMs')
             selection = (self.player.playlist_selection(snapshot.path, self.playlist)
                          if hasattr(self.player, 'playlist_selection') else discover_playlist(snapshot.path, self.playlist))
             items = [self.library.add(path) for path in selection.paths]
             index = next(i for i, item in enumerate(items) if item.path == snapshot.path.resolve())
+            mark('playlistMs')
             resume_in_place = bool(
                 previous and previous.id == resume_session_id
                 and previous.owner == 'pc' and not previous.revoked
@@ -145,6 +156,7 @@ class SessionManager:
                 # Validate media before publishing a new session ID.
                 self.library.probe(items[index])
                 self.library.preload(items, index)
+            mark('metadataMs')
             self.session = ViewingSession(uuid.uuid4().hex, items, index, snapshot,
                                            selection.source, selection.warning,
                                            last_seen=self.clock(), pc_path=snapshot.path,
@@ -152,6 +164,16 @@ class SessionManager:
             self._save()
             response = self._describe(base_url)
             response['resumeInPlace'] = resume_in_place
+            mark('responseMs')
+            timings['totalMs'] = round((time.perf_counter() - started) * 1000)
+            response['startupTiming'] = timings
+            timing_path = self.data_dir / 'startup-timing.json'
+            temporary = timing_path.with_suffix('.tmp')
+            try:
+                temporary.write_text(json.dumps(timings), encoding='utf-8')
+                temporary.replace(timing_path)
+            except OSError:
+                pass  # Optional timing diagnostics must not fail a handoff.
             return response
 
     def progress(self, data):

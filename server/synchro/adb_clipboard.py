@@ -22,6 +22,8 @@ class AdbClipboard:
         self.serial = None
         self.origin = None
         self.send_lock = threading.RLock()
+        self.images_supported = None
+        self.last_error = None
 
     def devices(self):
         if not self.adb:
@@ -45,6 +47,7 @@ class AdbClipboard:
         if not isinstance(origin, str) or not re.fullmatch('[a-f0-9]{32}', origin):
             raise ValueError('Invalid clipboard origin')
         events = queue.Queue(maxsize=1)
+        self.images_supported, self.last_error = None, None
         self.events = events
         bridge = self.root / 'dist/Synchro-Clipboard.jar'
         if not bridge.is_file() or not self.adb:
@@ -77,8 +80,14 @@ class AdbClipboard:
                 if not isinstance(event, dict):
                     continue
                 if event.get('type') == 'ready':
+                    self.images_supported = event.get('images') is True
                     startup.put(True)
+                elif event.get('type') == 'error':
+                    reason = event.get('reason')
+                    if isinstance(reason, str) and re.fullmatch(r'[A-Za-z0-9_.]{1,80}', reason):
+                        self.last_error = reason
                 elif event.get('type') in {'clipboard', 'image'}:
+                    self.last_error = None
                     # A disconnected/slow consumer retains only the newest value.
                     try:
                         events.get_nowait()

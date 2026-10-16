@@ -59,8 +59,10 @@ class DeviceHub:
         self.links = OrderedDict()
         self.receipts = OrderedDict()
         self.enabled, self.serial, self.connected = False, None, False
+        self.connection_revision = 0
         self.wireless = None
         self.message = 'Автосинхронизация выключена'
+        self.connection_message = 'Системный буфер подключён'
         self.last_source, self.last_type, self.last_at = None, None, None
         self.settings = self.root / '.data/sync-settings.json'
         try:
@@ -76,7 +78,9 @@ class DeviceHub:
         with self.lock:
             return {'clipboard': {'enabled': self.enabled, 'connected': self.connected,
                     'message': self.message, 'lastSource': self.last_source,
-                    'lastType': self.last_type, 'lastAt': self.last_at},
+                    'lastType': self.last_type, 'lastAt': self.last_at,
+                    'imagesSupported': getattr(self.adb, 'images_supported', None),
+                    'bridgeError': getattr(self.adb, 'last_error', None)},
                     'links': list(self.links.values())}
 
     def mode(self, data):
@@ -87,13 +91,19 @@ class DeviceHub:
         if serial is not None and (not isinstance(serial, str) or len(serial) > 200):
             raise ValueError('Invalid device')
         with self.lock:
+            self.connection_revision += 1
             self.enabled, self.serial = enabled, serial
             if not enabled:
                 self.connected = False
-            self.settings.parent.mkdir(parents=True, exist_ok=True)
-            self.settings.write_text(json.dumps({'enabled': enabled, 'device': serial}), encoding='utf-8')
+            self._save_settings()
             self.message = 'Подключаем системный буфер…' if enabled else 'Автосинхронизация выключена'
         return self.status()
+
+    def _save_settings(self):
+        self.settings.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.settings.with_suffix('.tmp')
+        temporary.write_text(json.dumps({'enabled': self.enabled, 'device': self.serial}), encoding='utf-8')
+        temporary.replace(self.settings)
 
     def clipboard_write(self, data):
         return self._apply_phone_content({'type': 'text', 'text': plain_text(data.get('text'))})
@@ -208,9 +218,14 @@ class DeviceHub:
     def _monitor(self):
         sequence = self.clipboard.sequence()
         next_connect = 0
+        observed_revision = -1
         while not self.stopped.wait(.15):
             try:
-                if not self.enabled:
+                with self.lock:
+                    enabled, serial, revision = self.enabled, self.serial, self.connection_revision
+                if revision != observed_revision:
+                    next_connect, observed_revision = 0, revision
+                if not enabled:
                     if self.adb.alive():
                         self.adb.close()
                     self.connected = False
@@ -218,6 +233,9 @@ class DeviceHub:
                         sequence = self.clipboard.sequence()
                         self.synced_digest = None
                     continue
+                if self.adb.alive() and serial and getattr(self.adb, 'serial', serial) != serial:
+                    self.adb.close()
+                    self.connected = False
                 if not self.adb.alive():
                     self.connected = False
                     if time.monotonic() < next_connect:
@@ -225,16 +243,27 @@ class DeviceHub:
                     next_connect = time.monotonic() + 3
                     devices = self.adb.devices()
                     physical = [d for d in devices if not d['emulator']]
-                    device = (next((d for d in devices if d['id'] == self.serial), None)
-                              if self.serial else (physical[0] if len(physical) == 1 else None))
+                    device = (next((d for d in devices if d['id'] == serial), None)
+                              if serial else (physical[0] if len(physical) == 1 else None))
                     if device is None:
                         address = self.wireless.reconnect() if self.wireless else None
                         if address:
-                            self.mode({'enabled': True, 'device': address})
-                        self.message = 'Подключите телефон по USB или беспроводной отладке'
-                        continue
+                            device = next((d for d in devices if d['id'] == address),
+                                          {'id': address, 'name': 'Ваш телефон'})
+                        else:
+                            with self.lock:
+                                if self.enabled and revision == self.connection_revision:
+                                    self.message = 'Подключите телефон по USB или беспроводной отладке'
+                            continue
+                    with self.lock:
+                        if not self.enabled or revision != self.connection_revision:
+                            continue
+                        # Persist the usable ADB identity without re-enabling a
+                        # mode the user may have disabled during discovery.
+                        self.serial = device['id']
+                        self._save_settings()
                     self.adb.start(device['id'], self.origin)
-                    if not self.enabled or self.stopped.is_set():
+                    if not self.enabled or revision != self.connection_revision or self.stopped.is_set():
                         self.adb.close()
                         continue
                     # Starting/reconnecting never replays either device's old clipboard.
@@ -243,6 +272,13 @@ class DeviceHub:
                         self.synced_digest = None
                     self.connected = True
                     self.message = 'Системный буфер подключён · ' + device['name']
+                    if getattr(self.adb, 'images_supported', None) is False:
+                        self.message += ' · Android не предоставил фоновый доступ к фото'
+                    self.connection_message = self.message
+                if getattr(self.adb, 'last_error', None):
+                    self.message = 'Android не предоставил доступ к последней копии; попробуйте скопировать её снова'
+                elif self.connected:
+                    self.message = self.connection_message
                 with self.clipboard_lock:
                     content = self._read_phone_content()
                     if content is not None:

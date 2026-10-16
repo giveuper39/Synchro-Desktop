@@ -209,7 +209,10 @@ class WirelessSetup:
             address = f"{record['host']}:{record['port']}"
             result = self._run('connect', address, timeout=6)
             if result.returncode == 0:
-                return address
+                try:
+                    return self._install_device(address, address)
+                except (ValueError, OSError, subprocess.SubprocessError):
+                    return None
         return None
 
     def close(self):

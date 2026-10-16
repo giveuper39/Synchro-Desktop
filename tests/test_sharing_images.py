@@ -3,8 +3,10 @@ from collections import deque
 from io import BytesIO
 from pathlib import Path
 import sys
+import json
 import tempfile
 import time
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -221,6 +223,48 @@ class SharingImageTests(unittest.TestCase):
         time.sleep(.2)
         self.assertEqual(self.clipboard.content, image)
         self.assertEqual(self.adb.outgoing, [])
+
+    def test_reconnected_route_starts_without_waiting_for_a_different_adb_alias(self):
+        self.hub.wireless = type('Wireless', (), {'reconnect': lambda _: '192.168.1.22:42000'})()
+        self.hub.mode({'enabled': True, 'device': '192.168.1.22:41000'})
+        self.await_state(lambda: self.hub.connected)
+        self.assertEqual(self.hub.serial, '192.168.1.22:42000')
+        image = photo('olive')
+        self.adb.incoming.append(image)
+        self.await_state(lambda: self.clipboard.content == image)
+        self.assertEqual(self.hub.status()['clipboard']['lastSource'], 'phone')
+
+    def test_disable_during_reconnect_is_never_overwritten(self):
+        started, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        def reconnect(_):
+            started.set()
+            release.wait(2)
+            return '192.168.1.22:42000'
+        self.hub.wireless = type('Wireless', (), {'reconnect': reconnect})()
+        self.hub.mode({'enabled': True, 'device': 'old-route'})
+        self.assertTrue(started.wait(2))
+        self.hub.mode({'enabled': False})
+        release.set()
+        time.sleep(.3)
+        self.assertFalse(self.hub.enabled)
+        self.assertFalse(self.adb.running)
+        self.assertFalse(json.loads(self.hub.settings.read_text(encoding='utf-8'))['enabled'])
+
+    def test_selection_during_reconnect_is_not_replaced_by_its_old_result(self):
+        started, release = threading.Event(), threading.Event()
+        self.addCleanup(release.set)
+        def reconnect(_):
+            started.set()
+            release.wait(2)
+            return 'obsolete-route'
+        self.hub.wireless = type('Wireless', (), {'reconnect': reconnect})()
+        self.hub.mode({'enabled': True, 'device': 'old-route'})
+        self.assertTrue(started.wait(2))
+        self.hub.mode({'enabled': True, 'device': 'phone'})
+        release.set()
+        self.await_state(lambda: self.hub.connected)
+        self.assertEqual(self.hub.serial, 'phone')
 
 
 if __name__ == '__main__':
