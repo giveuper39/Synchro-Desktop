@@ -9,7 +9,7 @@ if not exist ".venv\Scripts\python.exe" (
     python -m venv .venv
     if errorlevel 1 goto failed
 )
-".venv\Scripts\python.exe" -c "from importlib.metadata import version; assert version('qrcode') == '8.2'; assert version('zeroconf') == '0.151.5'" >nul 2>&1
+".venv\Scripts\python.exe" -c "from importlib.metadata import version; assert version('qrcode') == '8.2'; assert version('zeroconf') == '0.151.5'; assert version('Pillow') == '12.3.0'" >nul 2>&1
 if errorlevel 1 (
     echo Preparing Synchro...
     ".venv\Scripts\python.exe" -m pip install --disable-pip-version-check --quiet -e server
