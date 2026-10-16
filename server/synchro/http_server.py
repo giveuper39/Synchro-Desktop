@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from . import __version__
 from .models import PlayerUnavailable, SessionConflict
-from .pairing import pairing_page, download_page
+from .pairing import pairing_page, pairing_details, download_page
 
 
 class RangeNotSatisfiable(ValueError):
@@ -131,6 +131,7 @@ class HandoffHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('X-Frame-Options', 'DENY')
+        self.send_header('Referrer-Policy', 'no-referrer')
         for name, value in (headers or {}).items():
             self.send_header(name, value)
         if self.headers.get('Origin', '').startswith('chrome-extension://') and self._extension():
@@ -157,8 +158,12 @@ class HandoffHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             path = urlsplit(self.path).path
-            if path == '/':
+            if path in ('/', '/connect'):
                 self._reply(200, download_page().encode('utf-8'), 'text/html; charset=utf-8')
+            elif path == '/local/pairing' and self._local():
+                host = self.server.pairing_host or '127.0.0.1'
+                address = f'http://{host}:{self.server.server_port}'
+                self._reply(200, pairing_details(address, self.server.manager.token))
             elif path == '/setup' and self._local():
                 from .setup_page import setup_page
                 self._reply(200, setup_page().encode('utf-8'), 'text/html; charset=utf-8')

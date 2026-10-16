@@ -7,7 +7,7 @@ from urllib.parse import urlsplit, parse_qs
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'server'))
-from synchro.pairing import pairing_uri, qr_svg, pairing_page, download_page
+from synchro.pairing import pairing_uri, connection_url, pairing_details, qr_svg, pairing_page, download_page
 
 
 class PairingTests(unittest.TestCase):
@@ -30,17 +30,28 @@ class PairingTests(unittest.TestCase):
         self.assertNotIn('<image', svg)
         self.assertNotIn('href=', svg)
 
-    def test_page_has_separate_connect_and_install_qr_codes(self):
+    def test_one_camera_url_contains_pairing_only_in_fragment(self):
+        link = connection_url('http://192.168.1.22:8765', 'test_key_which_is_not_a_real_secret', 'Мой компьютер')
+        parsed = urlsplit(link)
+        self.assertEqual((parsed.scheme, parsed.netloc, parsed.path, parsed.query),
+                         ('http', '192.168.1.22:8765', '/connect', ''))
+        fields = parse_qs(parsed.fragment)
+        self.assertEqual(fields['token'], ['test_key_which_is_not_a_real_secret'])
+        self.assertEqual(fields['name'], ['Мой компьютер'])
+        self.assertEqual(fields['v'], ['1'])
+        self.assertNotIn('server', fields)
+
+    def test_local_endpoint_encodes_one_universal_qr(self):
         with patch('synchro.pairing.qr_svg', return_value='<svg/>') as encoder:
-            page = pairing_page('http://192.168.1.22:8765', 'test_key_which_is_not_a_real_secret')
-        self.assertEqual(encoder.call_count, 2)
-        self.assertTrue(encoder.call_args_list[0].args[0].startswith('synchro://pair?'))
-        self.assertEqual(encoder.call_args_list[1].args[0], 'http://192.168.1.22:8765/synchro.apk')
-        self.assertIn('<details>', page)
+            details = pairing_details('http://192.168.1.22:8765', 'test_key_which_is_not_a_real_secret')
+        encoder.assert_called_once_with(details['url'])
+        self.assertEqual(details['qrSvg'], '<svg/>')
+        self.assertIn('/connect#v=1&', details['url'])
 
     def test_public_download_page_does_not_contain_pairing_credentials(self):
-        self.assertNotIn('token', download_page())
+        self.assertNotIn('test_key_which_is_not_a_real_secret', download_page())
         self.assertIn('/synchro.apk', download_page())
+        self.assertNotIn('test_key_which_is_not_a_real_secret', pairing_page('http://example.test', 'test_key_which_is_not_a_real_secret'))
 
 
 if __name__ == '__main__':

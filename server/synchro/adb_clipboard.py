@@ -30,9 +30,11 @@ class AdbClipboard:
                                 encoding='utf-8', timeout=6, creationflags=NO_WINDOW)
         devices = []
         for line in result.stdout.splitlines()[1:]:
-            fields = line.split()
-            if len(fields) < 2 or fields[1] != 'device':
+            match = re.fullmatch(r'(.+?)\s+(device|offline|unauthorized)(?:\s+(.*))?', line.strip())
+            if not match or match[2] != 'device':
                 continue
+            identity, metadata = match[1], (match[3] or '').split()
+            fields = [identity, 'device', *metadata]
             model = next((part[6:] for part in fields if part.startswith('model:')), fields[0])
             devices.append({'id': fields[0], 'name': model.replace('_', ' '),
                             'emulator': fields[0].startswith('emulator-')})

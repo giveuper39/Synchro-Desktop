@@ -90,7 +90,23 @@ class HTTPTests(unittest.TestCase):
         self.assertEqual(self.request('GET', '/pair', {'Host':'other-lan-device:8765'})[0], 404)
         status, _, page = self.request('GET', '/pair')
         self.assertEqual(status, 200)
-        self.assertEqual(page.count(b'<svg'), 2)
+        self.assertIn(b'id="universalQr"', page)
+        self.assertNotIn(self.token.encode(), page)
+
+    def test_universal_pairing_details_are_local_but_phone_landing_is_public(self):
+        from urllib.parse import urlsplit, parse_qs
+        for headers in ({'Host': 'foreign.example'}, {'Origin': 'https://foreign.example'}):
+            self.assertEqual(self.request('GET', '/local/pairing', headers)[0], 404)
+        status, _, body = self.request('GET', '/local/pairing')
+        self.assertEqual(status, 200)
+        link = json.loads(body)['url']
+        self.assertEqual(urlsplit(link).query, '')
+        self.assertEqual(parse_qs(urlsplit(link).fragment)['token'], [self.token])
+        status, headers, body = self.request('GET', '/connect', {'Host': 'phone-facing-lan:8765'})
+        self.assertEqual(status, 200)
+        self.assertNotIn(self.token.encode(), body)
+        self.assertIn(b'/synchro.apk', body)
+        self.assertEqual(headers['Referrer-Policy'], 'no-referrer')
 
     def _reset_connection(self, path, after_body=False):
         completed = threading.Event()

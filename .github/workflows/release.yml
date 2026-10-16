@@ -42,6 +42,7 @@ jobs:
           python -m unittest discover -s tests
           node --test chrome-extension/protocol.test.mjs
           node --test tests/youtube_connector.test.mjs
+          node --test tests/pairing_page.test.mjs
           python tools/package_extension.py
       - name: Build clipboard bridge and include official ADB
         shell: pwsh

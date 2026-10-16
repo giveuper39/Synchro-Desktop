@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "synchro-desktop"
-version = "0.4.0"
+version = "0.4.1"
 description = "Synchro desktop service for local media, clipboard and browser handoff"
 requires-python = ">=3.11"
 license = {text = "MIT"}

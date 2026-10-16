@@ -7,6 +7,7 @@ import subprocess
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 
 from .pairing import pairing_uri, qr_svg
 
@@ -116,38 +117,84 @@ class WirelessSetup:
                 return
             self.state.update(stage=stage, message=message, **fields)
 
+    def _install_device(self, requested, paired):
+        """ADB may publish the QR-connected phone under its mDNS name, not IP:port."""
+        devices = [d for d in self.hub.adb.devices() if not d['emulator']]
+        if any(d['id'] == requested for d in devices):
+            return requested
+        if requested != paired:
+            raise ValueError('Телефон не подключён. Включите беспроводную отладку и повторите подключение')
+        result = self._run('-s', requested, 'get-state', timeout=4)
+        if result.returncode == 0 and result.stdout.strip() == 'device':
+            return requested
+        host = urlsplit('http://' + requested).hostname
+        with self.lock:
+            records = dict(self.records)
+        for device in devices:
+            name = device['id'].rstrip('.')
+            if not name.endswith('.local'):
+                name += '.local'
+            record = records.get(name + '.')
+            if record and record['kind'] == CONNECT and record['host'] == host:
+                return device['id']
+            if self.known_serial:
+                serial = self._run('-s', device['id'], 'shell', 'getprop ro.serialno', timeout=4)
+                if serial.returncode == 0 and serial.stdout.strip() == self.known_serial:
+                    return device['id']
+        raise ValueError('Телефон отключился. Включите беспроводную отладку и подключите его снова')
+
     def finish(self, device):
         with self.lock:
             if self.state['stage'] == 'installing':
                 return dict(self.state)
-        devices = self.hub.adb.devices()
-        if not any(d['id'] == device and not d['emulator'] for d in devices):
-            raise ValueError('Выберите подключённый телефон')
-        with self.lock:
+            paired = self.state.get('device')
+            device = device or paired
+            if not isinstance(device, str) or not 1 <= len(device) <= 256 or any(ord(c) < 32 for c in device):
+                raise ValueError('Выберите подключённый телефон')
             self.generation += 1
             generation = self.generation
-            self._message('installing', 'Устанавливаем и подключаем приложение…', device=device)
+            self._message('installing', 'Проверяем подключение телефона…', device=device, phase='checking')
         def install():
             try:
+                selected = self._install_device(device, paired)
                 apk = self.root / 'dist/Synchro-Android.apk'
-                result = self._run('-s', device, 'install', '-r', str(apk), timeout=120)
+                if not apk.is_file():
+                    raise ValueError('APK отсутствует на компьютере. Обновите переносимую сборку Synchro')
+                self._message('installing', 'Передаём APK на телефон. Дождитесь окончания установки…',
+                              generation=generation, phase='installing', device=selected)
+                result = self._run('-s', selected, 'install', '-r', str(apk), timeout=120)
                 if result.returncode or 'Success' not in result.stdout:
-                    raise OSError('Install failed')
+                    reason = result.stdout + (getattr(result, 'stderr', '') or '')
+                    if 'INSTALL_FAILED_UPDATE_INCOMPATIBLE' in reason:
+                        raise ValueError('Android отклонил обновление: у установленного приложения другая подпись')
+                    if 'INSTALL_FAILED_USER_RESTRICTED' in reason:
+                        raise ValueError('Android запретил установку. Подтвердите её на телефоне или скачайте APK вручную')
+                    if 'INSTALL_FAILED_VERSION_DOWNGRADE' in reason:
+                        raise ValueError('На телефоне уже установлена более новая версия Synchro')
+                    raise ValueError('Android не установил APK. Проверьте экран телефона или скачайте APK вручную')
+                self._message('installing', 'Приложение установлено. Подключаем к компьютеру…',
+                              generation=generation, phase='connecting')
                 # Quote for Android's POSIX shell. URLs contain '&' and must stay one argument.
                 uri = pairing_uri(self.address, self.token)
                 command = ('am start -n dev.potplayer.handoff/.MainActivity '
                            '-a android.intent.action.VIEW -d ' + shlex.quote(uri))
-                if self._run('-s', device, 'shell', command).returncode:
+                if self._run('-s', selected, 'shell', command).returncode:
                     raise OSError('Launch failed')
-                serial = self._run('-s', device, 'shell', 'getprop ro.serialno').stdout.strip()
+                serial = self._run('-s', selected, 'shell', 'getprop ro.serialno').stdout.strip()
                 if serial and len(serial) < 100 and all(c.isalnum() or c in '_-' for c in serial):
                     self.known_serial = serial
                     self.settings.parent.mkdir(parents=True, exist_ok=True)
                     self.settings.write_text(json.dumps({'serial': serial}), encoding='utf-8')
-                self.hub.mode({'enabled': True, 'device': device})
+                self.hub.mode({'enabled': True, 'device': selected})
                 self._message('done', 'Готово. Synchro подключён, автоматический буфер включён', generation=generation)
+            except ValueError as error:
+                self._message('error', str(error), generation=generation, retryable=True)
+            except subprocess.TimeoutExpired:
+                self._message('error', 'Телефон не ответил вовремя. Повторите установку или скачайте APK вручную',
+                              generation=generation, retryable=True)
             except Exception:
-                self._message('error', 'Не удалось установить приложение. Можно скачать APK и установить его вручную', generation=generation)
+                self._message('error', 'Не удалось подключить приложение. Проверьте телефон и повторите установку',
+                              generation=generation, retryable=True)
         threading.Thread(target=install, name='synchro-phone-install', daemon=True).start()
         return self.status()
 

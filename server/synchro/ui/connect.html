@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer">
+<title>Synchro · Подключить телефон</title>
+<style>
+@font-face{font-family:Manrope;src:url('/ui/Manrope.ttf');font-weight:200 800}
+:root{color-scheme:dark;font:15px Manrope,system-ui;background:#101216;color:#f9f6ef}*{box-sizing:border-box}body{margin:0;min-height:100svh;background:radial-gradient(ellipse at 80% 0,#3e3623,transparent 55%),#101216}
+main{max-width:460px;margin:auto;padding:34px 24px 40px}.brand{display:flex;align-items:center;gap:12px;font-weight:750;font-size:25px;letter-spacing:-1px}.mark{width:36px;height:36px;color:#f4c75b}.eyebrow{margin-top:52px;font-size:10px;letter-spacing:1.7px;color:#ad9b6d}h1{font-size:34px;line-height:1.15;letter-spacing:-1.4px;margin:14px 0 16px}p{line-height:1.8;color:#9ca4b3;margin:12px 0}
+.computer{border:1px solid #303641;border-radius:20px;background:#191d24;padding:20px;margin:28px 0}.computer strong{display:block;font-size:16px}.computer span{display:block;font-size:12px;color:#9ca4b3;margin-top:6px;overflow-wrap:anywhere}.button{display:block;text-align:center;background:#f4c75b;color:#17191e;font-weight:750;padding:18px 16px;border-radius:18px;text-decoration:none;margin:12px 0;border:0;font:inherit;font-weight:700;width:100%;cursor:pointer}.secondary{background:#262c35;color:#f9f6ef}.small{font-size:12px;line-height:1.8}.note{border-top:1px solid #292f38;padding-top:20px;margin-top:28px}#status{min-height:48px}[hidden]{display:none!important}details{margin-top:24px;color:#9ca4b3;font-size:12px;line-height:1.8}summary{cursor:pointer;color:#d3d9e2}a{color:#f4c75b}
+</style>
+<main><div class="brand"><svg class="mark" viewBox="0 0 36 36" fill="none" aria-hidden="true"><path d="M26 8H15a7 7 0 0 0 0 14h6a7 7 0 0 0 0-14M10 28h11a7 7 0 0 0 0-14h-6a7 7 0 0 0 0 14" stroke="currentColor" stroke-width="4" stroke-linecap="round"/></svg>Synchro</div>
+<div class="eyebrow">ВАШ ТЕЛЕФОН И КОМПЬЮТЕР</div><h1 id="heading">Продолжайте рядом.</h1>
+<p id="description">Установите Synchro для просмотра видео, обмена текстом, фото и вкладками в локальной сети.</p>
+<div id="computer" class="computer" hidden><strong id="computer-name"></strong><span id="computer-address"></span></div>
+<a id="open-app" class="button" hidden>Открыть Synchro</a><a id="download" class="button secondary" href="/synchro.apk" download="Synchro-Android.apk">Скачать APK с компьютера</a>
+<p id="status" class="small" role="status" aria-live="polite">Телефон и компьютер должны быть в одной локальной сети.</p>
+<p id="after-install" class="small note" hidden>После установки вернитесь в эту вкладку и нажмите «Открыть Synchro». Адрес компьютера и ключ уже сохранены в ссылке — сканировать QR повторно не нужно.</p>
+<details><summary>Если Android просит разрешение установки</summary><p>Разрешите установку APK для вашего браузера и подтвердите системный установщик. Скачивание идёт с вашего компьютера; магазин приложений не требуется.</p></details></main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const invalid = () => { throw Error('invalid_pairing_link'); };
+  function parameters(raw) {
+    const fields = new URLSearchParams(raw);
+    for (const key of fields.keys()) if (fields.getAll(key).length !== 1) invalid();
+    return fields;
+  }
+  function readPair() {
+    if (location.hash.length > 4096) invalid();
+    const outer = parameters(location.hash.slice(1));
+    if (!location.hash) return null;
+    let fields;
+    if (outer.has('pair')) {
+      // Read existing installation links without making the new QR unnecessarily dense.
+      if ([...outer.keys()].some(key => !['pair', 'install'].includes(key))) invalid();
+      const raw = outer.get('pair');
+      if (raw.length > 2048) invalid();
+      const uri = new URL(raw);
+      if (!['synchro:', 'syncro:', 'potplayerreceiver:'].includes(uri.protocol)
+          || uri.hostname !== 'pair' || uri.username || uri.password || uri.port || uri.hash
+          || !['', '/'].includes(uri.pathname)) invalid();
+      fields = parameters(uri.search);
+    } else {
+      if ([...outer.keys()].some(key => !['v','token','name','install'].includes(key))) invalid();
+      fields = outer;
+      fields.set('server', location.origin);
+    }
+    if (outer.has('install') && outer.get('install') !== '1') invalid();
+    const server = new URL(fields.get('server'));
+    const secret = fields.get('token') || '';
+    const name = fields.get('name') || 'Ваш компьютер';
+    if (fields.get('v') !== '1' || !/^[A-Za-z0-9_-]{24,256}$/.test(secret)
+        || name.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(name)
+        || server.origin !== location.origin || server.username || server.password
+        || server.search || server.hash || server.pathname !== '/') invalid();
+    const query = new URLSearchParams({v:'1',server:server.origin,token:secret,name});
+    const fallback = new URL('/connect', location.origin);
+    fallback.hash = new URLSearchParams({v:'1',token:secret,name,install:'1'}).toString();
+    // The legacy scheme also opens installed 0.3 clients. Pin the receiver package.
+    const intent = 'intent://pair?' + query
+      + '#Intent;scheme=syncro;package=dev.potplayer.handoff;S.browser_fallback_url='
+      + encodeURIComponent(fallback.href) + ';end';
+    return {name, server:server.origin, intent, install:outer.get('install') === '1'};
+  }
+  let pair;
+  try { pair = readPair(); }
+  catch (_) {
+    $('heading').textContent = 'Откройте новый QR';
+    $('description').textContent = 'Эта ссылка подключения повреждена или относится к другому компьютеру. Отсканируйте QR в мастере Synchro ещё раз.';
+    return;
+  }
+  if (!pair) { $('download').className = 'button'; return; }
+  $('heading').textContent = 'Ваш компьютер. Уже рядом.';
+  $('description').textContent = 'Если Synchro уже установлена, откройте приложение. Адрес и ключ подключения заполнятся автоматически.';
+  $('computer').hidden = false;
+  $('computer-name').textContent = pair.name;
+  $('computer-address').textContent = pair.server;
+  $('open-app').href = pair.intent;
+  $('open-app').hidden = false;
+  $('after-install').hidden = false;
+  if (pair.install) {
+    $('heading').textContent = 'Установите Synchro';
+    $('description').textContent = 'Скачайте APK с этого компьютера. После установки эта же ссылка подключит приложение.';
+    $('download').className = 'button';
+    $('open-app').className = 'button secondary';
+    $('open-app').textContent = 'Я установил — открыть Synchro';
+  }
+  $('status').textContent = pair.install
+    ? 'Установите APK с этого компьютера, затем вернитесь сюда и откройте Synchro. Если приложение уже есть, браузер мог запросить подтверждение перехода.'
+    : 'Нет приложения? Скачайте APK с этого ПК и подтвердите установку на телефоне.';
+  $('open-app').addEventListener('click', () => {
+    $('status').textContent = 'Открываем Synchro. Если переход не выполнен, подтвердите его в браузере или установите APK ниже.';
+  });
+  $('download').addEventListener('click', () => {
+    $('status').textContent = 'Скачивание APK началось. Откройте загруженный файл, подтвердите установку и вернитесь в эту вкладку.';
+  });
+  // Do not probe installed apps or loop through redirects. Browsers may require a tap.
+  if (!pair.install && navigator.userActivation && navigator.userActivation.isActive
+      && /Android/i.test(navigator.userAgent)) location.replace(pair.intent);
+})();
+</script></html>

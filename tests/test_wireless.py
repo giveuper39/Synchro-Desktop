@@ -21,6 +21,9 @@ class WirelessTests(unittest.TestCase):
             {'id': '192.168.1.22:40000', 'name': 'Android', 'emulator': False}]), mode=Mock())
         self.setup = WirelessSetup(directory.name, self.hub, 'http://192.168.1.2:8765',
                                    'test_key_not_used_for_any_real_device')
+        apk = Path(directory.name) / 'dist/Synchro-Android.apk'
+        apk.parent.mkdir()
+        apk.write_bytes(b'synthetic-test-apk')
         self.addCleanup(self.setup.close)
 
     def await_state(self, stage):
@@ -64,8 +67,53 @@ class WirelessTests(unittest.TestCase):
         self.assertNotIn(self.setup.token, self.setup.settings.read_text())
 
     def test_unconnected_device_cannot_be_selected_for_installation(self):
-        with self.assertRaises(ValueError):
+        with patch.object(self.setup, '_run') as run:
             self.setup.finish('other-device')
+            self.await_state('error')
+            run.assert_not_called()
+        self.hub.mode.assert_not_called()
+
+    def test_mdns_alias_from_paired_phone_is_used_when_ip_route_disappears(self):
+        identity = 'adb-TEST-phone (2)._adb-tls-connect._tcp'
+        self.hub.adb.devices = lambda: [{'id': identity, 'name': 'Test phone', 'emulator': False}]
+        self.setup.state = {'stage': 'paired', 'device': '192.168.1.22:40000'}
+        self.setup.records[identity + '.local.'] = {'kind': CONNECT, 'host': '192.168.1.22', 'port': 42000}
+        def command(*args, **kwargs):
+            if args[-1] == 'get-state':
+                return SimpleNamespace(returncode=1, stdout='')
+            return SimpleNamespace(returncode=0, stdout='Success')
+        with patch.object(self.setup, '_run', side_effect=command) as run:
+            self.setup.finish(None)
+            self.await_state('done')
+        install = next(call for call in run.call_args_list if 'install' in call.args)
+        self.assertEqual(install.args[1], identity)
+        self.hub.mode.assert_called_once_with({'enabled': True, 'device': identity})
+
+    def test_disconnected_phone_reports_persistent_retryable_error(self):
+        self.hub.adb.devices = lambda: []
+        self.setup.state = {'stage': 'paired', 'device': '192.168.1.22:40000'}
+        with patch.object(self.setup, '_run', return_value=SimpleNamespace(returncode=1, stdout='')):
+            self.setup.finish(None)
+            self.await_state('error')
+        self.assertTrue(self.setup.status()['retryable'])
+        self.assertIn('отключился', self.setup.status()['message'])
+        self.hub.mode.assert_not_called()
+
+    def test_adb_list_preserves_mdns_names_with_spaces_and_skips_offline(self):
+        from synchro.adb_clipboard import AdbClipboard
+        listing = ('List of devices attached\n'
+                   'adb-TEST-phone (2)._adb-tls-connect._tcp\tdevice product:x model:OnePlus_15\n'
+                   'other\toffline\n'
+                   'emulator-5556\tdevice product:emulator model:Test\n')
+        transport = AdbClipboard(self.setup.root)
+        transport.adb = 'adb'
+        with patch('synchro.adb_clipboard.subprocess.run', return_value=SimpleNamespace(stdout=listing)):
+            devices = transport.devices()
+        self.assertEqual(devices[0]['id'], 'adb-TEST-phone (2)._adb-tls-connect._tcp')
+        self.assertEqual(devices[0]['name'], 'OnePlus 15')
+        self.assertFalse(devices[0]['emulator'])
+        self.assertEqual(len(devices), 2)
+        self.assertTrue(devices[1]['emulator'])
 
     def test_old_qr_generation_cannot_change_new_wizard_state(self):
         self.setup.generation = 2
